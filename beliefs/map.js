@@ -1,5 +1,5 @@
-import { client } from "../client.js";
-import { agents } from "./agents.js";
+import { client } from "../deliveroo/client.js";
+import { agents } from "./otherAgents.js";
 
 export const map = {
     tiles: [],

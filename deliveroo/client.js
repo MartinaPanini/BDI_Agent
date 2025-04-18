@@ -1,6 +1,11 @@
 import { DeliverooApi } from "@unitn-asa/deliveroo-js-client";
 import * as pddlClient from "@unitn-asa/pddl-client";
 
+import config from "../deliveroo/config.js"; // adjust the path if needed
+
+const SERVER_URL = config.host;
+const TOKEN = config.token;  
+
 // Make sure these are defined in the environment or before import
 export const client = new DeliverooApi(SERVER_URL, TOKEN);
 

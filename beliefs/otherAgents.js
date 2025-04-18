@@ -1,5 +1,6 @@
-import { client } from "../client.js";
-import pathfinding from "../movement/pathfinding";  // Import pathfinding
+import { client } from "../deliveroo/client.js";
+import pathFinding from '../movements/pathFinding.js';
+
 
 export const agents = new Map();
 
@@ -35,7 +36,7 @@ export function getSafestNearbyTile(tiles, meX, meY) {
 
 // Assuming `me` holds the agent's current position
 export function handleMovement(targetX, targetY) {
-    const path = pathfinding(me, {x: targetX, y: targetY});
+    const path = pathFinding(me, {x: targetX, y: targetY});
     
     if (path) {
       for (let step of path) {

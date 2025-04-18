@@ -1,4 +1,4 @@
-import { client } from "../client.js";
+import { client } from "../deliveroo/client.js";
 import { me } from "./me.js";
 
 export const parcels = new Map();

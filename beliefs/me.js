@@ -1,4 +1,4 @@
-import { client } from "../client.js";
+import { client } from "../deliveroo/client.js";
 
 export const me = {
     id: null,
