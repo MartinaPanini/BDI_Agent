@@ -60,6 +60,10 @@ export async function startAgent() {
     initializeBelief();
 
     // Initialize the right intention revision strategy
+    // Select and instantiate the correct intention revision strategy:
+        // queue: FIFO-style plan execution.
+        // replace: Discard current plan and replace with a better one.
+        // priority: Use intention priorities.
     switch (agentConfig.intentionRevisionStrategy) {
       case "queue":
         myAgent = new IntentionRevisionQueue();
