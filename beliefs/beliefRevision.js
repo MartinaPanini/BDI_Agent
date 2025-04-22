@@ -1,7 +1,7 @@
 import { client } from "../deliveroo/client.js";
 import { me } from "./me.js";
-import { agents, updateAgents } from "./agents.js";
 import { updateDeliveryZones, getSafestZone } from "./map.js";
+import { agents } from "./otherAgents.js";
 
 // Memory of each agent's positions over time
 const memory = new Map(); // agentId -> [{ x, y, time }]
@@ -11,8 +11,11 @@ client.onAgentsSensing((sensedAgents) => {
     const now = Date.now();
     const seenNow = new Set(); // Track agents currently sensed
 
-    // Update agent beliefs and process each sensed agent
-    updateAgents(sensedAgents);
+    // Update agent beliefs
+    agents.clear();
+    for (const a of sensedAgents) {
+        agents.set(a.id, a);
+    }
 
     for (const a of sensedAgents) {
         seenNow.add(a.id);

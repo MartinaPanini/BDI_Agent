@@ -44,7 +44,16 @@ export function handleMovement(targetX, targetY) {
         // Update agent's belief about its position
         me.x = step.current.x;
         me.y = step.current.y;
-        // You can also add logic to update the agent’s belief state after each move
+        for (const agent of agents.values()) {
+          const dx = Math.abs(agent.x - me.x);
+          const dy = Math.abs(agent.y - me.y);
+          if (dx + dy <= 3) { // Assuming sensing range is 3
+            // Update the agent's last known position
+            agent.x = step.current.x;
+            agent.y = step.current.y;
+          }
+        }
+
       }
     }
   }

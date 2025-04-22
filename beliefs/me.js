@@ -15,5 +15,5 @@ client.onYou(({ id, name, x, y, score, parcels }) => {
     me.x = x;
     me.y = y;
     me.score = score;
-    me.carrying = parcels;
+    me.carrying = Array.isArray(parcels) ? parcels : [];
 });
