@@ -1,4 +1,5 @@
 import { DeliverooApi } from "@unitn-asa/deliveroo-js-client";
+import EventEmitter from "events";
 
 const client = new DeliverooApi(
     'https://deliveroojs2.rtibdi.disi.unitn.it/',
@@ -70,16 +71,25 @@ client.onYou( ( {id, name, x, y, score} ) => {
  * @type { Map< string, {id: string, carriedBy?: string, x:number, y:number, reward:number} > }
  */
 const parcels = new Map();
-
-client.onParcelsSensing( async ( pp ) => {
-    for (const p of pp) {
-        parcels.set( p.id, p);
-    }
-    for ( const p of parcels.values() ) {
-        if ( pp.map( p => p.id ).find( id => id == p.id ) == undefined ) {
-            parcels.delete( p.id );
+const sensingEmitter = new EventEmitter();
+client.onParcelsSensing( async ( perceived_parcels ) => {
+    let new_parcel_sensed = false;
+    for (const p of perceived_parcels) {
+        if ( ! parcels.has(p.id) )
+            new_parcel_sensed = true;
+        parcels.set( p.id, p)
+        if ( p.carriedBy == me.id ) {
+            me.carrying.set( p.id, p );
         }
     }
+    for ( const [id,p] of parcels.entries() ) {
+        if ( ! perceived_parcels.find( p=>p.id==id ) ) {
+            parcels.delete( id ); 
+            me.carrying.delete( id );
+        }
+    }
+    if (new_parcel_sensed)
+        sensingEmitter.emit("new_parcel")
 } )
 
 
@@ -94,26 +104,29 @@ function optionsGeneration () {
     /**
      * Options generation
      */
-        const options = [];
+    let carriedQty = me.carrying.size;
+    let carriedReward = Array.from( me.carrying.values() ).reduce( (acc, parcel) => acc + parcel.reward, 0 )
+
+    const options = []
+    for (const parcel of parcels.values()) {
+        if ( ! parcel.carriedBy )
+            options.push( [ 'go_pick_up', parcel.x, parcel.y, parcel.id, parcel.reward ] );
+    }
+    if ( carriedReward > 0 || parcels.size > 0 ) {
+        options.push( [ 'go_deliver' ] );
+    }
     
-        // Check the number of parcels and the decay intervals
-        const parcelsToDeliver = Array.from(parcels.values()).filter(p => p.carriedBy === me.id);
-        if (parcelsToDeliver.length > 10 || parcelsToDeliver.some(p => p.reward < 10)) {
-            // Find nearest delivery zone if conditions are met
-            const nearestDeliveryZone = nearestDelivery(me);
-            if (nearestDeliveryZone) {
-                options.push(['go_deliver', nearestDeliveryZone.x, nearestDeliveryZone.y, parcelsToDeliver[0].id]); // Deliver the first parcel
-            }
+    function reward (option) {
+        if ( option[0] == 'go_deliver' ) {
+            let deliveryTile = nearestDelivery(me)
+            return carriedReward - carriedQty * MOVEMENT_DURATION/PARCEL_DECADING_INTERVAL * distance( me, deliveryTile ); // carried parcels value - cost for delivery
         }
-    
-        // Check for other 'go_pick_up' options if parcels are not exceeding the limit
-        if (parcelsToDeliver.length <= 10) {
-            for (const parcel of parcels.values()) {
-                if (!parcel.carriedBy) {
-                    options.push(['go_pick_up', parcel.x, parcel.y, parcel.id]);
-                }
-            }
+        else if ( option[0] == 'go_pick_up' ) {
+            let [go_pick_up,x,y,id,reward] = option;
+            let deliveryTile = nearestDelivery({x, y});
+            return carriedReward + reward - (carriedQty+1) * MOVEMENT_DURATION/PARCEL_DECADING_INTERVAL * (distance( {x, y}, me ) + distance( {x, y}, deliveryTile ) ); // parcel value - cost for pick up - cost for delivery
         }
+    }
     
         // Options filtering - choose best one based on distance
         let best_option;
@@ -128,12 +141,16 @@ function optionsGeneration () {
                 }
             }
         }
-    
-        // Select the best option
-        if (best_option) {
-            myAgent.push(best_option);
-        }
-    }
+     /**
+     * Options filtering / sorting
+     */
+
+     options.sort( (o1, o2) => reward(o1)-reward(o2) )
+
+     for (const opt of options) {
+         myAgent.push( opt )
+     }
+}
 
 /**
  * Generate options at every sensing event
@@ -427,32 +444,24 @@ class GoPickUp extends Plan {
 
 class GoDeliver extends Plan {
 
-    static isApplicableTo (go_deliver, x, y, id) {
-        return go_deliver == 'go_deliver'; // Check if the action is go_deliver
+    static isApplicableTo ( go_deliver ) {
+        return go_deliver == 'go_deliver';
     }
 
-    async execute (go_deliver, x, y, id) {
-        if (this.stopped) throw ['stopped']; // If stopped, quit immediately
+    async execute ( go_deliver ) {
 
-        const parcel = parcels.get(id);
-        if (!parcel || !parcel.carriedBy || parcel.carriedBy !== me.id) {
-            console.log('No parcel to deliver or the agent is not carrying the correct parcel');
-            return false;
-        }
+        let deliveryTile = nearestDelivery( me );
 
-        // Step 1: Move to the delivery location (x, y)
-        await this.subIntention(['go_to', x, y]);
-        if (this.stopped) throw ['stopped']; // If stopped, quit immediately
+        await this.subIntention( ['go_to', deliveryTile.x, deliveryTile.y] );
+        if ( this.stopped ) throw ['stopped']; // if stopped then quit
 
-        // Step 2: Deliver the parcel
-        await client.emitDeliver(id); // This will emit the delivery event for the parcel
-        if (this.stopped) throw ['stopped']; // If stopped, quit immediately
-
-        // Step 3: Confirm delivery
-        console.log(`Parcel ${id} delivered successfully to (${x}, ${y})`);
+        await client.emitPutdown()
+        if ( this.stopped ) throw ['stopped']; // if stopped then quit
 
         return true;
+
     }
+
 }
 
 
