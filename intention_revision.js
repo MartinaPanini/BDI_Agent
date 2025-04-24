@@ -1,4 +1,5 @@
 import { DeliverooApi } from "@unitn-asa/deliveroo-js-client";
+import { log } from "console";
 import EventEmitter from "events";
 
 const client = new DeliverooApi(
@@ -115,40 +116,52 @@ function optionsGeneration () {
     if ( carriedReward > 0 || parcels.size > 0 ) {
         options.push( [ 'go_deliver' ] );
     }
+    // if ( me.carrying.size >= 3 ) {
+    //     options.push( [ 'go_deliver' ] );
+    // }
+    
     
     function reward (option) {
         if ( option[0] == 'go_deliver' ) {
+            let [go_deliver,x,y] = option;
             let deliveryTile = nearestDelivery(me)
-            return carriedReward - carriedQty * MOVEMENT_DURATION/PARCEL_DECADING_INTERVAL * distance( me, deliveryTile ); // carried parcels value - cost for delivery
+            let computedReward = carriedReward - carriedQty * MOVEMENT_DURATION/PARCEL_DECADING_INTERVAL * distance( me, deliveryTile );
+            console.log('Reward delivery', computedReward);
+            return computedReward; // carried parcels value - cost for delivery
+            
         }
         else if ( option[0] == 'go_pick_up' ) {
             let [go_pick_up,x,y,id,reward] = option;
             let deliveryTile = nearestDelivery({x, y});
-            return carriedReward + reward - (carriedQty+1) * MOVEMENT_DURATION/PARCEL_DECADING_INTERVAL * (distance( {x, y}, me ) + distance( {x, y}, deliveryTile ) ); // parcel value - cost for pick up - cost for delivery
+            let computedReward = carriedReward + reward - (carriedQty+1) * MOVEMENT_DURATION/PARCEL_DECADING_INTERVAL * (distance( {x, y}, me ) + distance( {x, y}, deliveryTile ) ); // parcel value - cost for pick up - cost for delivery
+            console.log('Reward pick up', computedReward);
+            return computedReward;
         }
     }
     
         // Options filtering - choose best one based on distance
-        let best_option;
-        let nearest = Number.MAX_VALUE;
-        for (const option of options) {
-            if (option[0] === 'go_pick_up') {
-                let [go_pick_up, x, y, id] = option;
-                let current_d = distance({ x, y }, me);
-                if (current_d < nearest) {
-                    best_option = option;
-                    nearest = current_d;
-                }
-            }
-        }
+        // let best_option;
+        // let nearest = Number.MAX_VALUE;
+        // for (const option of options) {
+        //     if (option[0] === 'go_pick_up') {
+        //         let [go_pick_up, x, y, id] = option;
+        //         let current_d = distance({ x, y }, me);
+        //         if (current_d < nearest) {
+        //             best_option = option;
+        //             nearest = current_d;
+        //         }
+        //     }
+        // }
      /**
      * Options filtering / sorting
      */
 
      options.sort( (o1, o2) => reward(o1)-reward(o2) )
+     console.log( 'options sorted', options.map(o=>o[0]) );
 
      for (const opt of options) {
          myAgent.push( opt )
+         console.log( 'pushed option', ...opt );
      }
 }
 
@@ -215,6 +228,39 @@ class IntentionRevisionRevise extends IntentionRevision {
     async push (predicate) {
         console.log('Revising intention queue. Received', ...predicate);
 
+        if (predicate[0] === 'go_deliver') {
+            // Calculate utility based on carried parcels
+            let carriedQty = me.carrying.size;
+            let carriedReward = Array.from(me.carrying.values()).reduce((acc, p) => acc + p.reward, 0);
+            if (carriedQty === 0) {
+                console.log('Skipping go_deliver: no parcels carried');
+                return;
+            }
+    
+            const deliveryTile = nearestDelivery(me);
+            console.log('Delivery tile:', deliveryTile);
+            const deliveryDistance = distance(me, deliveryTile);
+            const deliveryUtility = carriedReward - carriedQty * MOVEMENT_DURATION / PARCEL_DECADING_INTERVAL * deliveryDistance;
+    
+            const alreadyQueued = this.intention_queue.find(i => i.predicate[0] === 'go_deliver');
+            if (alreadyQueued) {
+                console.log('Intention already in queue:', predicate);
+                return;
+            }
+    
+            const current = this.intention_queue[0];
+            if (current && current.predicate[0] === 'go_deliver') {
+                console.log('Already planning to deliver');
+                return;
+            }
+    
+            const intention = new Intention(this, predicate);
+            intention.utility = deliveryUtility;
+            this.intention_queue.unshift(intention);
+            return;
+        }
+    
+        // --- Original go_pick_up logic ---
         const [type, x, y, id] = predicate;
         const parcel = parcels.get(id);
         if (!parcel || parcel.carriedBy) {
@@ -442,27 +488,55 @@ class GoPickUp extends Plan {
 
 }
 
+// class GoDeliver extends Plan {
+
+//     static isApplicableTo ( go_deliver, x, y, id ) {
+//         return go_deliver == 'go_deliver';
+//     }
+
+//     async execute ( go_deliver, x, y ) {
+
+//         let deliveryTile = nearestDelivery( me );
+
+//         await this.subIntention( ['go_to', deliveryTile.x, deliveryTile.y] );
+//         if ( this.stopped ) throw ['stopped']; // if stopped then quit
+
+//         await client.emitPutdown()
+//         if ( this.stopped ) throw ['stopped']; // if stopped then quit
+
+//         return true;
+
+//     }
+
+// }
+
 class GoDeliver extends Plan {
 
-    static isApplicableTo ( go_deliver ) {
+    static isApplicableTo(go_deliver, x, y) {
         return go_deliver == 'go_deliver';
     }
 
-    async execute ( go_deliver ) {
+    async execute(go_deliver, x, y) {
+        console.log('Executing GoDeliver with coordinates:', x, y);
+        // Check if the agent is on the delivery point and put down the parcel
+        if (me.x == x && me.y == y) {
+            // if (this.stopped) throw ['stopped']; // if stopped then quit
+            await client.emitPutdown()
+            // if (this.stopped) throw ['stopped']; // if stopped then quit
+            return true;
+        }
 
-        let deliveryTile = nearestDelivery( me );
-
-        await this.subIntention( ['go_to', deliveryTile.x, deliveryTile.y] );
-        if ( this.stopped ) throw ['stopped']; // if stopped then quit
-
+        // Move the agent to the delivery point and put down the parcel
+        // if (this.stopped) throw ['stopped']; // if stopped then quit
+        await this.subIntention(['go_to', x, y]);
+        if (this.stopped) throw ['stopped']; // if stopped then quit
         await client.emitPutdown()
-        if ( this.stopped ) throw ['stopped']; // if stopped then quit
+        // if (this.stopped) throw ['stopped']; // if stopped then quit
 
         return true;
-
     }
-
 }
+
 
 
 class BlindMove extends Plan {
@@ -524,5 +598,6 @@ class BlindMove extends Plan {
 
 // plan classes are added to plan library 
 planLibrary.push( GoPickUp )
-planLibrary.push( BlindMove )
 planLibrary.push( GoDeliver )
+planLibrary.push( BlindMove )
+
