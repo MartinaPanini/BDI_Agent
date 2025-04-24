@@ -322,11 +322,34 @@ class IntentionRevisionRevise extends IntentionRevision {
     }
 }
 
+class IntentionRevisionReplace extends IntentionRevision {
+
+    async push ( predicate ) {
+
+        // Check if already queued
+        const last = this.intention_queue.at( this.intention_queue.length - 1 );
+        if ( last && last.predicate.join(' ') == predicate.join(' ') ) {
+            return; // intention is already being achieved
+        }
+        
+        console.log( 'IntentionRevisionReplace.push', predicate );
+        const intention = new Intention( this, predicate );
+        this.intention_queue.push( intention );
+        
+        // Force current intention stop 
+        if ( last ) {
+            last.stop();
+        }
+    }
+
+}
+
 
 /**
  * Start intention revision loop
  */
-const myAgent = new IntentionRevisionRevise();
+// const myAgent = new IntentionRevisionRevise();
+const myAgent = new IntentionRevisionReplace();
 myAgent.loop();
 
 
@@ -510,33 +533,54 @@ class GoPickUp extends Plan {
 
 // }
 
+// class GoDeliver extends Plan {
+
+//     static isApplicableTo(go_deliver, x, y) {
+//         return go_deliver == 'go_deliver';
+//     }
+
+//     async execute(go_deliver, x, y) {
+//         console.log('Executing GoDeliver with coordinates:', x, y);
+//         // Check if the agent is on the delivery point and put down the parcel
+//         if (me.x == x && me.y == y) {
+//             // if (this.stopped) throw ['stopped']; // if stopped then quit
+//             await client.emitPutdown()
+//             // if (this.stopped) throw ['stopped']; // if stopped then quit
+//             return true;
+//         }
+
+//         // Move the agent to the delivery point and put down the parcel
+//         // if (this.stopped) throw ['stopped']; // if stopped then quit
+//         await this.subIntention(['go_to', x, y]);
+//         if (this.stopped) throw ['stopped']; // if stopped then quit
+//         await client.emitPutdown()
+//         // if (this.stopped) throw ['stopped']; // if stopped then quit
+
+//         return true;
+//     }
+// }
+
 class GoDeliver extends Plan {
 
-    static isApplicableTo(go_deliver, x, y) {
+    static isApplicableTo ( go_deliver ) {
         return go_deliver == 'go_deliver';
     }
 
-    async execute(go_deliver, x, y) {
-        console.log('Executing GoDeliver with coordinates:', x, y);
-        // Check if the agent is on the delivery point and put down the parcel
-        if (me.x == x && me.y == y) {
-            // if (this.stopped) throw ['stopped']; // if stopped then quit
-            await client.emitPutdown()
-            // if (this.stopped) throw ['stopped']; // if stopped then quit
-            return true;
-        }
+    async execute ( go_deliver ) {
 
-        // Move the agent to the delivery point and put down the parcel
-        // if (this.stopped) throw ['stopped']; // if stopped then quit
-        await this.subIntention(['go_to', x, y]);
-        if (this.stopped) throw ['stopped']; // if stopped then quit
+        let deliveryTile = nearestDelivery( me );
+
+        await this.subIntention( ['go_to', deliveryTile.x, deliveryTile.y] );
+        if ( this.stopped ) throw ['stopped']; // if stopped then quit
+
         await client.emitPutdown()
-        // if (this.stopped) throw ['stopped']; // if stopped then quit
+        if ( this.stopped ) throw ['stopped']; // if stopped then quit
 
         return true;
-    }
-}
 
+    }
+
+}
 
 
 class BlindMove extends Plan {
