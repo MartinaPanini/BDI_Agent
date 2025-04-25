@@ -17,7 +17,7 @@ function distance( {x:x1, y:y1}, {x:x2, y:y2}) {
 var AGENTS_OBSERVATION_DISTANCE
 var MOVEMENT_DURATION
 var PARCEL_DECADING_INTERVAL
-const DELIVERY_ZONE_THRESHOLD = 5; // Set this as the distance threshold for being "near" a delivery zone
+const DELIVERY_ZONE_THRESHOLD = 10; // Set this as the distance threshold for being "near" a delivery zone
 
 client.onConfig( (config) => {
     AGENTS_OBSERVATION_DISTANCE = config.AGENTS_OBSERVATION_DISTANCE;
@@ -126,33 +126,52 @@ client.onParcelsSensing((perceived_parcels) => {
 
 // Global store for option metadata
 const optionsWithMetadata = new Map();
-function optionsGeneration () {
-    // TODO revisit beliefset revision so to trigger option generation only in the case a new parcel is observed
+function optionsGeneration() {
     let carriedQty = me.carrying.size;
     let carriedReward = Array.from(me.carrying.values()).reduce((acc, parcel) => acc + parcel.reward, 0);
     const options = [];
 
-    for (const parcel of parcels.values()) {
-        if (!parcel.carriedBy) {
-            const opt = ['go_pick_up', parcel.x, parcel.y, parcel.id, parcel.reward];
-            const deliveryTile = nearestDelivery({x: parcel.x, y: parcel.y});
-            const utility = carriedReward + parcel.reward - (carriedQty+1) * MOVEMENT_DURATION/PARCEL_DECADING_INTERVAL * (distance({x: parcel.x, y: parcel.y}, me) + distance({x: parcel.x, y: parcel.y}, deliveryTile));
-            opt._meta = { utility };
-            optionsWithMetadata.set(opt.join(','), opt._meta);
-            options.push(opt);
+    // Check for nearby delivery zone
+    const deliveryTile = nearestDelivery(me);
+    const distanceToDelivery = distance(me, deliveryTile);
+    let deliveryUtility = 0;
+
+    // If the agent is carrying parcels and there's a nearby delivery zone
+    if (carriedReward > 0) {
+        console.log('DeliveryTile:', deliveryTile);
+        console.log('Distance to delivery:', distanceToDelivery);
+
+        // Calculate utility for delivery, prioritizing if the agent is close to the delivery zone
+        if (distanceToDelivery < DELIVERY_ZONE_THRESHOLD) {
+            // Prioritize delivery if within threshold, set utility to a high value
+            deliveryUtility = carriedReward; // Make it high to prioritize delivery
+            console.log('Delivery option is prioritized due to proximity');
+        } else {
+            // Calculate utility when the agent is not close
+            deliveryUtility = carriedReward - carriedQty * MOVEMENT_DURATION / PARCEL_DECADING_INTERVAL * distanceToDelivery;
+        }
+
+        const deliveryOption = ['go_deliver'];
+        deliveryOption._meta = { utility: deliveryUtility };
+        optionsWithMetadata.set(deliveryOption.join(','), deliveryOption._meta);
+        options.push(deliveryOption);
+    }
+
+    // Generate options for picking up parcels, but only if no delivery is prioritized
+    if (carriedReward <= 0 || parcels.size > 0) {
+        for (const parcel of parcels.values()) {
+            if (!parcel.carriedBy) {
+                const opt = ['go_pick_up', parcel.x, parcel.y, parcel.id, parcel.reward];
+                const utility = carriedReward + parcel.reward - (carriedQty + 1) * MOVEMENT_DURATION / PARCEL_DECADING_INTERVAL * (distance({x: parcel.x, y: parcel.y}, me) + distance({x: parcel.x, y: parcel.y}, deliveryTile));
+                opt._meta = { utility };
+                optionsWithMetadata.set(opt.join(','), opt._meta);
+                options.push(opt);
+            }
         }
     }
 
-    if (carriedReward > 0 || parcels.size > 0) {
-        const deliveryTile = nearestDelivery(me);
-        const deliveryUtility = carriedReward - carriedQty * MOVEMENT_DURATION / PARCEL_DECADING_INTERVAL * distance(me, deliveryTile);
-        const opt = ['go_deliver'];
-        opt._meta = { utility: deliveryUtility };
-        optionsWithMetadata.set(opt.join(','), opt._meta);
-        options.push(opt);
-    }
-
-    options.sort((a, b) => b._meta.utility - a._meta.utility); // descending by utility
+    // Sort the options based on utility, with delivery prioritized if applicable
+    options.sort((a, b) => b._meta.utility - a._meta.utility);
 
     console.log('options sorted', options.map(o => `${o[0]} (U=${o._meta.utility.toFixed(2)})`));
 
@@ -161,6 +180,7 @@ function optionsGeneration () {
         console.log('pushed option', ...opt);
     }
 }
+
 
 /**
  * Generate options at every sensing event
