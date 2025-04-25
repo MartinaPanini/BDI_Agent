@@ -1,7 +1,6 @@
 import { DeliverooApi } from "@unitn-asa/deliveroo-js-client";
-import { log } from "console";
+import {a_star} from "BDI_Agent/astar_search.js"
 import EventEmitter from "events";
-
 
 // modify this code in a way that if there are no parcels to pickup (no events sensed) and the agent is carrying some parcels, the only action that the agent has to do is to deliver parcels to the delivery zone nearest
 
