@@ -46,57 +46,59 @@ function reconstruct_path(cameFrom, current) {
     return total_path
 }
 
-export function a_star(start, goal, h) {
-    // The set of discovered nodes that may need to be (re-)expanded.
-    // Initially, only the start node is known.
-    // This is usually implemented as a min-heap or priority queue rather than a hash-set.
-    const openSet = [ start ];
+export function a_star(start, goal, isWall) {
+    const openSet = [start];
+    const cameFrom = new Map();
 
-    // For node n, cameFrom[n] is the node immediately preceding it on the cheapest path from the start
-    // to n currently known.
-    const cameFrom = new Map()
+    const gScore = new Map();
+    gScore.set(`${start.x},${start.y}`, 0);
 
-    // For node n, gScore[n] is the cost of the cheapest path from start to n currently known.
-    const gScore = new Map() // default value of Infinity
-    gScore[start] = 0
+    const fScore = new Map();
+    const h = (a) => Math.abs(a.x - goal.x) + Math.abs(a.y - goal.y);
+    fScore.set(`${start.x},${start.y}`, h(start));
 
-    // For node n, fScore[n] := gScore[n] + h(n). fScore[n] represents our current best guess as to
-    // how cheap a path could be from start to finish if it goes through n.
-    const fScore = new Map() // default value of Infinity
-    fScore[start] = 0 + h(start)
+    while (openSet.length > 0) {
+        openSet.sort((a, b) => fScore.get(`${a.x},${a.y}`) - fScore.get(`${b.x},${b.y}`));
+        const current = openSet.shift();
 
-    while ( openSet.length > 0 ) // openSet is not empty
-        // This operation can occur in O(Log(N)) time if openSet is a min-heap or a priority queue
-        openSet.sort( (a, b) => h(a) - h(b) )
-        let current = openSet[0] // the node in openSet having the lowest fScore[] value
-        if ( h(current) == 0 )
-            return reconstruct_path(cameFrom, current)
-
-        openSet.Remove(current)
-        let neighbors = new Array(
-            {x: x+1, y },
-            {x: x-1, y },
-            {x: x, y: y+1 },
-            {x: x, y: y-1 }
-        );
-        neighbors = neighbors.filter( e => map.get(neighbor.x).get(neighbor.y) );
-        for (const neighbor of neighbors) { // each neighbor of current
-            // d(current,neighbor) is the weight of the edge from current to neighbor
-            // tentative_gScore is the distance from start to the neighbor through current
-            let tentative_gScore = gScore[current] + 1;
-            if ( tentative_gScore < ( gScore[neighbor] || Number.MAX_VALUE ) ) {
-                // This path to neighbor is better than any previous one. Record it!
-                cameFrom.set(neighbor, current)
-                gScore.set(neighbor, tentative_gScore)
-                fScore.set(neighbor, tentative_gScore + h(neighbor) )
-                if ( ! openSet.includes(neighbor) ) // neighbor not in openSet
-                    openSet.add(neighbor)
+        if (current.x === goal.x && current.y === goal.y) {
+            const path = [];
+            let curr = `${current.x},${current.y}`;
+            while (cameFrom.has(curr)) {
+                const [x, y] = curr.split(',').map(Number);
+                path.unshift({ x, y });
+                curr = cameFrom.get(curr);
             }
+            path.unshift(start);
+            return path;
         }
 
-    // Open set is empty but goal was never reached
-    return failure
+        const neighbors = [
+            { x: current.x + 1, y: current.y },
+            { x: current.x - 1, y: current.y },
+            { x: current.x, y: current.y + 1 },
+            { x: current.x, y: current.y - 1 },
+        ].filter(n => !isWall(n.x, n.y));
+
+        for (const neighbor of neighbors) {
+            const neighborKey = `${neighbor.x},${neighbor.y}`;
+            const tentativeG = gScore.get(`${current.x},${current.y}`) + 1;
+
+            if (!gScore.has(neighborKey) || tentativeG < gScore.get(neighborKey)) {
+                cameFrom.set(neighborKey, `${current.x},${current.y}`);
+                gScore.set(neighborKey, tentativeG);
+                fScore.set(neighborKey, tentativeG + h(neighbor));
+
+                if (!openSet.some(n => n.x === neighbor.x && n.y === neighbor.y)) {
+                    openSet.push(neighbor);
+                }
+            }
+        }
+    }
+
+    return []; // fail-safe: no path found
 }
+
 
 const start = {x: init_x, y: init_y};
 const goal = {x: target_x, y: target_y};
