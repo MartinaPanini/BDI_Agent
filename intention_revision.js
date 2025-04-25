@@ -1,8 +1,12 @@
 import { DeliverooApi } from "@unitn-asa/deliveroo-js-client";
-import {a_star} from "BDI_Agent/astar_search.js"
+import {a_star} from "./astar_search.js"
 import EventEmitter from "events";
 
-// modify this code in a way that if there are no parcels to pickup (no events sensed) and the agent is carrying some parcels, the only action that the agent has to do is to deliver parcels to the delivery zone nearest
+// TO DO:
+// - Integrate astar_search into the plan library
+// - Add a plan for the astar_search
+// - Add logic to avoid other agents
+// - Add logic to avoid walls
 
 const client = new DeliverooApi(
     'https://deliveroojs2.rtibdi.disi.unitn.it/',
@@ -15,6 +19,7 @@ function distance( {x:x1, y:y1}, {x:x2, y:y2}) {
     const dy = Math.abs( Math.round(y1) - Math.round(y2) )
     return dx + dy;
 }
+
 
 var AGENTS_OBSERVATION_DISTANCE
 var MOVEMENT_DURATION

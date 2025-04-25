@@ -46,7 +46,7 @@ function reconstruct_path(cameFrom, current) {
     return total_path
 }
 
-function a_star(start, goal, h) {
+export function a_star(start, goal, h) {
     // The set of discovered nodes that may need to be (re-)expanded.
     // Initially, only the start node is known.
     // This is usually implemented as a min-heap or priority queue rather than a hash-set.
