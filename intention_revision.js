@@ -17,6 +17,7 @@ function distance( {x:x1, y:y1}, {x:x2, y:y2}) {
 var AGENTS_OBSERVATION_DISTANCE
 var MOVEMENT_DURATION
 var PARCEL_DECADING_INTERVAL
+const DELIVERY_ZONE_THRESHOLD = 5; // Set this as the distance threshold for being "near" a delivery zone
 
 client.onConfig( (config) => {
     AGENTS_OBSERVATION_DISTANCE = config.AGENTS_OBSERVATION_DISTANCE;
@@ -119,77 +120,46 @@ client.onParcelsSensing((perceived_parcels) => {
 });
 
 
-
 /**
  * Options generation and filtering function
  */
+
+// Global store for option metadata
+const optionsWithMetadata = new Map();
 function optionsGeneration () {
-
     // TODO revisit beliefset revision so to trigger option generation only in the case a new parcel is observed
-
-    /**
-     * Options generation
-     */
     let carriedQty = me.carrying.size;
-    let carriedReward = Array.from( me.carrying.values() ).reduce( (acc, parcel) => acc + parcel.reward, 0 )
+    let carriedReward = Array.from(me.carrying.values()).reduce((acc, parcel) => acc + parcel.reward, 0);
+    const options = [];
 
-    const options = []
     for (const parcel of parcels.values()) {
-        if ( ! parcel.carriedBy )
-            options.push( [ 'go_pick_up', parcel.x, parcel.y, parcel.id, parcel.reward ] );
-    }
-    if ( carriedReward > 0 || parcels.size > 0 ) {
-        options.push( [ 'go_deliver' ] );
-    }
-    // if ( me.carrying.size >= 3 ) {
-    //     options.push( [ 'go_deliver' ] );
-    // }
-    
-    
-    function reward (option) {
-        if ( option[0] == 'go_deliver' ) {
-            let [go_deliver,x,y] = option;
-            let deliveryTile = nearestDelivery(me)
-            let computedReward = carriedReward - carriedQty * MOVEMENT_DURATION/PARCEL_DECADING_INTERVAL * distance( me, deliveryTile );
-            console.log('Parcel Decading Interval', PARCEL_DECADING_INTERVAL, 'Movement Duration', MOVEMENT_DURATION, 'Distance', distance( me, deliveryTile ), 'Carried Reward', carriedReward, 'Carried Qty', carriedQty);
-            console.log('Reward delivery', computedReward);
-            return computedReward; // carried parcels value - cost for delivery
-            
-        }
-        else if ( option[0] == 'go_pick_up' ) {
-            let [go_pick_up,x,y,id,reward] = option;
-            let deliveryTile = nearestDelivery({x, y});
-            let computedReward = carriedReward + reward - (carriedQty+1) * MOVEMENT_DURATION/PARCEL_DECADING_INTERVAL * (distance( {x, y}, me ) + distance( {x, y}, deliveryTile ) ); // parcel value - cost for pick up - cost for delivery
-            console.log('Parcel Decading Interval', PARCEL_DECADING_INTERVAL, 'Movement Duration', MOVEMENT_DURATION, 'Distance', distance( me, deliveryTile ), 'Carried Reward', carriedReward, 'Carried Qty', carriedQty);
-            console.log('Reward pick up', computedReward);
-            return computedReward;
+        if (!parcel.carriedBy) {
+            const opt = ['go_pick_up', parcel.x, parcel.y, parcel.id, parcel.reward];
+            const deliveryTile = nearestDelivery({x: parcel.x, y: parcel.y});
+            const utility = carriedReward + parcel.reward - (carriedQty+1) * MOVEMENT_DURATION/PARCEL_DECADING_INTERVAL * (distance({x: parcel.x, y: parcel.y}, me) + distance({x: parcel.x, y: parcel.y}, deliveryTile));
+            opt._meta = { utility };
+            optionsWithMetadata.set(opt.join(','), opt._meta);
+            options.push(opt);
         }
     }
-    
-        // Options filtering - choose best one based on distance
-        // let best_option;
-        // let nearest = Number.MAX_VALUE;
-        // for (const option of options) {
-        //     if (option[0] === 'go_pick_up') {
-        //         let [go_pick_up, x, y, id] = option;
-        //         let current_d = distance({ x, y }, me);
-        //         if (current_d < nearest) {
-        //             best_option = option;
-        //             nearest = current_d;
-        //         }
-        //     }
-        // }
-     /**
-     * Options filtering / sorting
-     */
 
-     options.sort( (o1, o2) => reward(o1)-reward(o2) )
-     console.log( 'options sorted', options.map(o=>o[0]) );
+    if (carriedReward > 0 || parcels.size > 0) {
+        const deliveryTile = nearestDelivery(me);
+        const deliveryUtility = carriedReward - carriedQty * MOVEMENT_DURATION / PARCEL_DECADING_INTERVAL * distance(me, deliveryTile);
+        const opt = ['go_deliver'];
+        opt._meta = { utility: deliveryUtility };
+        optionsWithMetadata.set(opt.join(','), opt._meta);
+        options.push(opt);
+    }
 
-     for (const opt of options) {
-         myAgent.push( opt )
-         console.log( 'pushed option', ...opt );
-     }
+    options.sort((a, b) => b._meta.utility - a._meta.utility); // descending by utility
+
+    console.log('options sorted', options.map(o => `${o[0]} (U=${o._meta.utility.toFixed(2)})`));
+
+    for (const opt of options) {
+        myAgent.push(opt);
+        console.log('pushed option', ...opt);
+    }
 }
 
 /**
@@ -231,7 +201,7 @@ class IntentionRevision {
                 await intention.achieve()
                 // Catch eventual error and continue
                 .catch( error => {
-                    // console.log( 'Failed intention', ...intention.predicate, 'with error:', ...error )
+                    console.log( 'Failed intention', ...intention.predicate, 'with error:', ...error )
                 } );
 
                 // Remove from the queue
@@ -250,125 +220,40 @@ class IntentionRevision {
 
 }
 
-class IntentionRevisionRevise extends IntentionRevision {
-
-    async push (predicate) {
-        console.log('Revising intention queue. Received', ...predicate);
-
-        if (predicate[0] === 'go_deliver') {
-            // Calculate utility based on carried parcels
-            let carriedQty = me.carrying.size;
-            let carriedReward = Array.from(me.carrying.values()).reduce((acc, p) => acc + p.reward, 0);
-            if (carriedQty === 0) {
-                console.log('Skipping go_deliver: no parcels carried');
-                return;
-            }
-    
-            const deliveryTile = nearestDelivery(me);
-            console.log('Delivery tile:', deliveryTile);
-            const deliveryDistance = distance(me, deliveryTile);
-            const deliveryUtility = carriedReward - carriedQty * MOVEMENT_DURATION / PARCEL_DECADING_INTERVAL * deliveryDistance;
-    
-            const alreadyQueued = this.intention_queue.find(i => i.predicate[0] === 'go_deliver');
-            if (alreadyQueued) {
-                console.log('Intention already in queue:', predicate);
-                return;
-            }
-    
-            const current = this.intention_queue[0];
-            if (current && current.predicate[0] === 'go_deliver') {
-                console.log('Already planning to deliver');
-                return;
-            }
-    
-            const intention = new Intention(this, predicate);
-            intention.utility = deliveryUtility;
-            this.intention_queue.unshift(intention);
-            return;
-        }
-    
-        // --- Original go_pick_up logic ---
-        const [type, x, y, id] = predicate;
-        const parcel = parcels.get(id);
-        if (!parcel || parcel.carriedBy) {
-            console.log('Skipping invalid or taken parcel:', id);
-            return;
-        }
-
-        // Utility calculation
-        var distanceToParcel = distance(me, parcel);
-        var movementTime = distanceToParcel * MOVEMENT_DURATION; // Time to move to the parcel
-        var decayPenalty = parcel.reward / (PARCEL_DECADING_INTERVAL / 1000); // Simple model of decay impact
-        var agentProximityPenalty = 0;
-
-        // Check for nearby agents to penalize
-        for (let [agentId, agent] of parcels) {
-            if (agentId !== me.id && distance(me, agent) <= AGENTS_OBSERVATION_DISTANCE) {
-                agentProximityPenalty += 1; // Increase penalty for nearby agents
-            }
-        }
-
-        // Combine factors into utility calculation
-        const newUtility = parcel.reward - distanceToParcel - agentProximityPenalty - decayPenalty;
-
-        // Check if intention is already in queue
-        const alreadyQueued = this.intention_queue.find(i => i.predicate.join(' ') === predicate.join(' '));
-        if (alreadyQueued) {
-            console.log('Intention already in queue:', predicate);
-            return;
-        }
-
-        // Compare with the current intention
-        const current = this.intention_queue[0];
-        if (current) {
-            const [currType, currX, currY, currId] = current.predicate;
-            const currParcel = parcels.get(currId);
-            if (!currParcel || currParcel.carriedBy) {
-                console.log('Current intention is no longer valid. Replacing.');
-                current.stop();
-                this.intention_queue.shift();
-            } else {
-                const currDistance = distance(me, currParcel);
-                const currentUtility = currParcel.reward - currDistance - (0 /* No nearby agents */) - (currParcel.reward / (PARCEL_DECADING_INTERVAL / 1000));
-
-                if (newUtility <= currentUtility) {
-                    console.log('New intention utility is lower or equal. Ignoring:', predicate);
-                    return;
-                }
-
-                console.log('Better utility found. Replacing current intention.');
-                current.stop();
-                this.intention_queue.shift();
-            }
-        }
-
-        // Add new intention with better utility
-        const intention = new Intention(this, predicate);
-        intention.utility = newUtility;
-        this.intention_queue.unshift(intention);
-    }
-}
-
 class IntentionRevisionReplace extends IntentionRevision {
 
     async push ( predicate ) {
+        const key = predicate.join(',');
+        const newMeta = optionsWithMetadata.get(key);
+        const newUtility = newMeta?.utility ?? 0;
 
-        // Check if already queued
-        const last = this.intention_queue.at( this.intention_queue.length - 1 );
-        if ( last && last.predicate.join(' ') == predicate.join(' ') ) {
-            return; // intention is already being achieved
+        const current = this.intention_queue[0];
+
+        if (current) {
+            const currKey = current.predicate.join(',');
+            const currentMeta = optionsWithMetadata.get(currKey);
+            const currUtility = currentMeta?.utility ?? 0;
+
+            if (currKey === key) {
+                console.log('Intention already being pursued:', predicate);
+                return;
+            }
+
+            if (newUtility <= currUtility) {
+                console.log('New intention has lower utility. Ignoring:', predicate);
+                return;
+            }
+
+            console.log('Replacing current intention with higher utility one');
+            current.stop();
+            this.intention_queue.shift();
         }
-        
-        console.log( 'IntentionRevisionReplace.push', predicate );
-        const intention = new Intention( this, predicate );
-        this.intention_queue.push( intention );
-        
-        // Force current intention stop 
-        if ( last ) {
-            last.stop();
-        }
+
+        console.log('IntentionRevisionReplace.push', predicate, `(U=${newUtility.toFixed(2)})`);
+        const intention = new Intention(this, predicate);
+        intention.utility = newUtility;
+        this.intention_queue.unshift(intention); // use unshift to prioritize
     }
-
 }
 
 
