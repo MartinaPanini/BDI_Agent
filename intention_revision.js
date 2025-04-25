@@ -125,14 +125,14 @@ function optionsGeneration() {
 
     // If the agent is carrying parcels and there's a nearby delivery zone
     if (carriedReward > 0) {
-        console.log('DeliveryTile:', deliveryTile);
-        console.log('Distance to delivery:', distanceToDelivery);
+        //console.log('DeliveryTile:', deliveryTile);
+        //console.log('Distance to delivery:', distanceToDelivery);
 
         // Calculate utility for delivery, prioritizing if the agent is close to the delivery zone
         if (distanceToDelivery < DELIVERY_ZONE_THRESHOLD) {
             // Prioritize delivery if within threshold, set utility to a high value
-            deliveryUtility = carriedReward; // Make it high to prioritize delivery
-            console.log('Delivery option is prioritized due to proximity');
+            deliveryUtility = 10000; // Make it high to prioritize delivery
+            //console.log('Delivery option is prioritized due to proximity');
         } else {
             // Calculate utility when the agent is not close
             deliveryUtility = carriedReward - carriedQty * MOVEMENT_DURATION / PARCEL_DECADING_INTERVAL * distanceToDelivery;
@@ -144,7 +144,6 @@ function optionsGeneration() {
         options.push(deliveryOption);
     }
 
-    // Generate options for picking up parcels, but only if no delivery is prioritized
     if (carriedReward <= 0 || parcels.size > 0) {
         for (const parcel of parcels.values()) {
             if (!parcel.carriedBy) {
@@ -172,17 +171,10 @@ function optionsGeneration() {
 
     for (const opt of options) {
         myAgent.push(opt);
-        console.log('pushed option', ...opt);
+        //console.log('pushed option', ...opt);
     }
 }
 
-
-// /**
-//  * Generate options at every sensing event
-//  */
-// client.onParcelsSensing( optionsGeneration )
-// client.onAgentsSensing( optionsGeneration )
-// client.onYou( optionsGeneration )
 
 /**
  * Generate options only when a relevant event occurs
@@ -192,7 +184,7 @@ sensingEmitter.on('new_parcel', () => {
     console.log('New parcel sensed, recalculating options...');
     optionsGeneration();
 });
-client.onAgentsSensing(optionsGeneration);
+//client.onAgentsSensing(optionsGeneration);
 client.onYou(optionsGeneration);
 
 /**
@@ -209,19 +201,19 @@ class IntentionRevision {
         while ( true ) {
             if (this.intention_queue.length > 0) {
                 const intention = this.intention_queue[0];
-                console.log('Intention queue:', this.intention_queue.map(i => i.predicate));
+                //console.log('Intention queue:', this.intention_queue.map(i => i.predicate));
                 
                 // Check if the current intention is still valid
                 let id = intention.predicate[2];
                 let parcel = parcels.get(id);
                 if (parcel && parcel.carriedBy) {
-                    console.log('Skipping intention, parcel no longer valid');
+                    //console.log('Skipping intention, parcel no longer valid');
                     continue;
                 }
 
                 // Execute the intention
                 await intention.achieve().catch((error) => {
-                    console.log('Failed intention:', ...intention.predicate, 'Error:', error);
+                    //console.log('Failed intention:', ...intention.predicate, 'Error:', error);
                 });
 
                 // Remove executed intention from the queue
@@ -248,12 +240,12 @@ class IntentionRevisionReplace extends IntentionRevision {
             const currUtility = currentMeta?.utility ?? 0;
 
             if (currKey === key) {
-                console.log('Intention already being pursued:', predicate);
+                //console.log('Intention already being pursued:', predicate);
                 return;
             }
 
             if (newUtility <= currUtility) {
-                console.log('New intention has lower utility. Ignoring:', predicate);
+                //console.log('New intention has lower utility. Ignoring:', predicate);
                 return;
             }
 
@@ -354,16 +346,18 @@ class Intention {
                 // or errors are caught so to continue with next plan
                 } catch (error) {
                     this.log( 'failed intention', ...this.predicate,'with plan', planClass.name, 'with error:', error );
+                    optionsGeneration();
                 }
             }
 
         }
 
         // if stopped then quit
-        if ( this.stopped ) throw [ 'stopped intention', ...this.predicate ];
-
+        if ( this.stopped ){
+            optionsGeneration();
+            throw [ 'stopped intention', ...this.predicate ];
+        }
         // no plans have been found to satisfy the intention
-        // this.log( 'no plan satisfied the intention ', ...this.predicate );
         throw ['no plan satisfied the intention ', ...this.predicate ]
     }
 
@@ -499,7 +493,7 @@ class BlindMove extends Plan {
             }
             
             if ( ! moved_horizontally && ! moved_vertically) {
-                this.log('stucked');
+                // this.log('stucked');
                 throw 'stucked';
             } else if ( me.x == x && me.y == y ) {
                 // this.log('target reached');
@@ -555,7 +549,7 @@ class RandomMove extends Plan {
             }
 
             // Log for debugging
-            this.log(`Moved randomly: ${randomDirection}`);
+            console.log(`Moved randomly: ${randomDirection}`);
 
             // Small delay to avoid continuous rapid movement
             await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second delay between moves
