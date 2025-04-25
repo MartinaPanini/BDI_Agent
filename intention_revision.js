@@ -20,7 +20,7 @@ function distance( {x:x1, y:y1}, {x:x2, y:y2}) {
 var AGENTS_OBSERVATION_DISTANCE
 var MOVEMENT_DURATION
 var PARCEL_DECADING_INTERVAL
-const DELIVERY_ZONE_THRESHOLD = 10; // Set this as the distance threshold for being "near" a delivery zone
+const DELIVERY_ZONE_THRESHOLD = 5; // Set this as the distance threshold for being "near" a delivery zone
 
 client.onConfig( (config) => {
     AGENTS_OBSERVATION_DISTANCE = config.AGENTS_OBSERVATION_DISTANCE;
@@ -125,16 +125,11 @@ function optionsGeneration() {
 
     // If the agent is carrying parcels and there's a nearby delivery zone
     if (carriedReward > 0) {
-        //console.log('DeliveryTile:', deliveryTile);
-        //console.log('Distance to delivery:', distanceToDelivery);
-
-        // Calculate utility for delivery, prioritizing if the agent is close to the delivery zone
+        // If the agent is carrying parcels and is near a delivery zone, prioritize delivery
         if (distanceToDelivery < DELIVERY_ZONE_THRESHOLD) {
-            // Prioritize delivery if within threshold, set utility to a high value
-            deliveryUtility = 10000; // Make it high to prioritize delivery
-            //console.log('Delivery option is prioritized due to proximity');
+            deliveryUtility = 10000; // High priority for delivery
         } else {
-            // Calculate utility when the agent is not close
+            // If the agent is far from the delivery zone, still consider delivery but less urgent
             deliveryUtility = carriedReward - carriedQty * MOVEMENT_DURATION / PARCEL_DECADING_INTERVAL * distanceToDelivery;
         }
 
@@ -144,7 +139,16 @@ function optionsGeneration() {
         options.push(deliveryOption);
     }
 
-    if (carriedReward <= 0 || parcels.size > 0) {
+    // If no parcels to pick up, but agent is carrying, focus only on delivering
+    if (carriedReward > 0 && parcels.size === 0) {
+        const deliveryOption = ['go_deliver'];
+        deliveryOption._meta = { utility: carriedReward }; // Set very high utility if no pick-ups
+        optionsWithMetadata.set(deliveryOption.join(','), deliveryOption._meta);
+        options.push(deliveryOption);
+    }
+
+    // Generate pickup options if there are parcels to pick up
+    else if (carriedReward <= 0 || parcels.size > 0) {
         for (const parcel of parcels.values()) {
             if (!parcel.carriedBy) {
                 const opt = ['go_pick_up', parcel.x, parcel.y, parcel.id, parcel.reward];
@@ -154,24 +158,23 @@ function optionsGeneration() {
                 options.push(opt);
             }
         }
-    }
+    } 
 
-    // Check if no options are available (i.e., agent has nothing to do)
-    if (options.length === 0) {
+    // Fallback random movement if no parcels and no deliveries to make
+    else {
         const randomMoveOption = ['random_move'];
-        randomMoveOption._meta = { utility: 0 }; // You can set utility to 0 since it's a fallback option
+        randomMoveOption._meta = { utility: 0 }; // Lower priority
         optionsWithMetadata.set(randomMoveOption.join(','), randomMoveOption._meta);
         options.push(randomMoveOption);
     }
 
-    // Sort the options based on utility, with delivery prioritized if applicable
+    // Sort options by utility, prioritizing delivery if applicable
     options.sort((a, b) => b._meta.utility - a._meta.utility);
 
     console.log('options sorted', options.map(o => `${o[0]} (U=${o._meta.utility.toFixed(2)})`));
 
     for (const opt of options) {
         myAgent.push(opt);
-        //console.log('pushed option', ...opt);
     }
 }
 
@@ -180,12 +183,14 @@ function optionsGeneration() {
  * Generate options only when a relevant event occurs
  */
 // Event-Driven Update for Pickup Utility
-sensingEmitter.on('new_parcel', () => {
-    console.log('New parcel sensed, recalculating options...');
-    optionsGeneration();
-});
-//client.onAgentsSensing(optionsGeneration);
+// sensingEmitter.on('new_parcel', () => {
+//     console.log('New parcel sensed, recalculating options...');
+//     optionsGeneration();
+// });
+
+// Trigger the option generation when `onYou` is triggered (position update, carrying status, etc.)
 client.onYou(optionsGeneration);
+client.onParcelsSensing(optionsGeneration);
 
 /**
  * Intention revision loop
