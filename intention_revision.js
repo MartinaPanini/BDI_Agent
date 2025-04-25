@@ -73,25 +73,50 @@ client.onYou( ( {id, name, x, y, score} ) => {
  */
 const parcels = new Map();
 const sensingEmitter = new EventEmitter();
-client.onParcelsSensing( async ( perceived_parcels ) => {
+// client.onParcelsSensing( async ( perceived_parcels ) => {
+//     let new_parcel_sensed = false;
+//     for (const p of perceived_parcels) {
+//         if ( ! parcels.has(p.id) )
+//             new_parcel_sensed = true;
+//         parcels.set( p.id, p)
+//         if ( p.carriedBy == me.id ) {
+//             me.carrying.set( p.id, p );
+//         }
+//     }
+//     for ( const [id,p] of parcels.entries() ) {
+//         if ( ! perceived_parcels.find( p=>p.id==id ) ) {
+//             parcels.delete( id ); 
+//             me.carrying.delete( id );
+//         }
+//     }
+//     if (new_parcel_sensed)
+//         sensingEmitter.emit("new_parcel")
+// } )
+
+client.onParcelsSensing((perceived_parcels) => {
     let new_parcel_sensed = false;
+
     for (const p of perceived_parcels) {
-        if ( ! parcels.has(p.id) )
+        if (!parcels.has(p.id)) {
             new_parcel_sensed = true;
-        parcels.set( p.id, p)
-        if ( p.carriedBy == me.id ) {
-            me.carrying.set( p.id, p );
+        }
+        parcels.set(p.id, p);
+        if (p.carriedBy === me.id) {
+            me.carrying.set(p.id, p);
         }
     }
-    for ( const [id,p] of parcels.entries() ) {
-        if ( ! perceived_parcels.find( p=>p.id==id ) ) {
-            parcels.delete( id ); 
-            me.carrying.delete( id );
+
+    // Remove only those that were previously carried or owned, not perceived anymore
+    for (const [id, p] of parcels.entries()) {
+        const stillVisible = perceived_parcels.find((q) => q.id === id);
+        if (!stillVisible && p.carriedBy === me.id) {
+            parcels.delete(id);
+            me.carrying.delete(id);
         }
     }
-    if (new_parcel_sensed)
-        sensingEmitter.emit("new_parcel")
-} )
+
+    if (new_parcel_sensed) sensingEmitter.emit("new_parcel");
+});
 
 
 
@@ -188,7 +213,7 @@ class IntentionRevision {
         while ( true ) {
             // Consumes intention_queue if not empty
             if ( this.intention_queue.length > 0 ) {
-                console.log( 'intentionRevision.loop', this.intention_queue.map(i=>i.predicate) );
+                // console.log( 'intentionRevision.loop', this.intention_queue.map(i=>i.predicate) );
             
                 // Current intention
                 const intention = this.intention_queue[0];
