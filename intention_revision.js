@@ -2,6 +2,9 @@ import { DeliverooApi } from "@unitn-asa/deliveroo-js-client";
 import { log } from "console";
 import EventEmitter from "events";
 
+
+// modify this code in a way that if there are no parcels to pickup (no events sensed) and the agent is carrying some parcels, the only action that the agent has to do is to deliver parcels to the delivery zone nearest
+
 const client = new DeliverooApi(
     'https://deliveroojs2.rtibdi.disi.unitn.it/',
     // Token for testing
@@ -74,26 +77,9 @@ client.onYou( ( {id, name, x, y, score} ) => {
  */
 const parcels = new Map();
 const sensingEmitter = new EventEmitter();
-// client.onParcelsSensing( async ( perceived_parcels ) => {
-//     let new_parcel_sensed = false;
-//     for (const p of perceived_parcels) {
-//         if ( ! parcels.has(p.id) )
-//             new_parcel_sensed = true;
-//         parcels.set( p.id, p)
-//         if ( p.carriedBy == me.id ) {
-//             me.carrying.set( p.id, p );
-//         }
-//     }
-//     for ( const [id,p] of parcels.entries() ) {
-//         if ( ! perceived_parcels.find( p=>p.id==id ) ) {
-//             parcels.delete( id ); 
-//             me.carrying.delete( id );
-//         }
-//     }
-//     if (new_parcel_sensed)
-//         sensingEmitter.emit("new_parcel")
-// } )
 
+
+// Update parcels based on sensing events
 client.onParcelsSensing((perceived_parcels) => {
     let new_parcel_sensed = false;
 
@@ -107,7 +93,7 @@ client.onParcelsSensing((perceived_parcels) => {
         }
     }
 
-    // Remove only those that were previously carried or owned, not perceived anymore
+    // Remove parcels that are no longer sensed
     for (const [id, p] of parcels.entries()) {
         const stillVisible = perceived_parcels.find((q) => q.id === id);
         if (!stillVisible && p.carriedBy === me.id) {
@@ -116,6 +102,7 @@ client.onParcelsSensing((perceived_parcels) => {
         }
     }
 
+    // Emit event only if a new parcel was sensed or existing parcel changed
     if (new_parcel_sensed) sensingEmitter.emit("new_parcel");
 });
 
@@ -170,6 +157,14 @@ function optionsGeneration() {
         }
     }
 
+    // Check if no options are available (i.e., agent has nothing to do)
+    if (options.length === 0) {
+        const randomMoveOption = ['random_move'];
+        randomMoveOption._meta = { utility: 0 }; // You can set utility to 0 since it's a fallback option
+        optionsWithMetadata.set(randomMoveOption.join(','), randomMoveOption._meta);
+        options.push(randomMoveOption);
+    }
+
     // Sort the options based on utility, with delivery prioritized if applicable
     options.sort((a, b) => b._meta.utility - a._meta.utility);
 
@@ -182,12 +177,23 @@ function optionsGeneration() {
 }
 
 
+// /**
+//  * Generate options at every sensing event
+//  */
+// client.onParcelsSensing( optionsGeneration )
+// client.onAgentsSensing( optionsGeneration )
+// client.onYou( optionsGeneration )
+
 /**
- * Generate options at every sensing event
+ * Generate options only when a relevant event occurs
  */
-client.onParcelsSensing( optionsGeneration )
-client.onAgentsSensing( optionsGeneration )
-client.onYou( optionsGeneration )
+// Event-Driven Update for Pickup Utility
+sensingEmitter.on('new_parcel', () => {
+    console.log('New parcel sensed, recalculating options...');
+    optionsGeneration();
+});
+client.onAgentsSensing(optionsGeneration);
+client.onYou(optionsGeneration);
 
 /**
  * Intention revision loop
@@ -201,43 +207,30 @@ class IntentionRevision {
 
     async loop ( ) {
         while ( true ) {
-            // Consumes intention_queue if not empty
-            if ( this.intention_queue.length > 0 ) {
-                // console.log( 'intentionRevision.loop', this.intention_queue.map(i=>i.predicate) );
-            
-                // Current intention
+            if (this.intention_queue.length > 0) {
                 const intention = this.intention_queue[0];
+                console.log('Intention queue:', this.intention_queue.map(i => i.predicate));
                 
-                // Is queued intention still valid? Do I still want to achieve it?
-                // TODO this hard-coded implementation is an example
-                let id = intention.predicate[2]
-                let p = parcels.get(id)
-                if ( p && p.carriedBy ) {
-                    console.log( 'Skipping intention because no more valid', intention.predicate )
+                // Check if the current intention is still valid
+                let id = intention.predicate[2];
+                let parcel = parcels.get(id);
+                if (parcel && parcel.carriedBy) {
+                    console.log('Skipping intention, parcel no longer valid');
                     continue;
                 }
 
-                // Start achieving intention
-                await intention.achieve()
-                // Catch eventual error and continue
-                .catch( error => {
-                    console.log( 'Failed intention', ...intention.predicate, 'with error:', ...error )
-                } );
+                // Execute the intention
+                await intention.achieve().catch((error) => {
+                    console.log('Failed intention:', ...intention.predicate, 'Error:', error);
+                });
 
-                // Remove from the queue
+                // Remove executed intention from the queue
                 this.intention_queue.shift();
             }
-            // Postpone next iteration at setImmediate
-            await new Promise( res => setImmediate( res ) );
+
+            await new Promise((resolve) => setImmediate(resolve)); // Loop with delay
         }
     }
-
-    // async push ( predicate ) { }
-
-    log ( ...args ) {
-        console.log( ...args )
-    }
-
 }
 
 class IntentionRevisionReplace extends IntentionRevision {
@@ -280,11 +273,8 @@ class IntentionRevisionReplace extends IntentionRevision {
 /**
  * Start intention revision loop
  */
-// const myAgent = new IntentionRevisionRevise();
 const myAgent = new IntentionRevisionReplace();
 myAgent.loop();
-
-
 
 /**
  * Intention
@@ -443,55 +433,6 @@ class GoPickUp extends Plan {
 
 }
 
-// class GoDeliver extends Plan {
-
-//     static isApplicableTo ( go_deliver, x, y, id ) {
-//         return go_deliver == 'go_deliver';
-//     }
-
-//     async execute ( go_deliver, x, y ) {
-
-//         let deliveryTile = nearestDelivery( me );
-
-//         await this.subIntention( ['go_to', deliveryTile.x, deliveryTile.y] );
-//         if ( this.stopped ) throw ['stopped']; // if stopped then quit
-
-//         await client.emitPutdown()
-//         if ( this.stopped ) throw ['stopped']; // if stopped then quit
-
-//         return true;
-
-//     }
-
-// }
-
-// class GoDeliver extends Plan {
-
-//     static isApplicableTo(go_deliver, x, y) {
-//         return go_deliver == 'go_deliver';
-//     }
-
-//     async execute(go_deliver, x, y) {
-//         console.log('Executing GoDeliver with coordinates:', x, y);
-//         // Check if the agent is on the delivery point and put down the parcel
-//         if (me.x == x && me.y == y) {
-//             // if (this.stopped) throw ['stopped']; // if stopped then quit
-//             await client.emitPutdown()
-//             // if (this.stopped) throw ['stopped']; // if stopped then quit
-//             return true;
-//         }
-
-//         // Move the agent to the delivery point and put down the parcel
-//         // if (this.stopped) throw ['stopped']; // if stopped then quit
-//         await this.subIntention(['go_to', x, y]);
-//         if (this.stopped) throw ['stopped']; // if stopped then quit
-//         await client.emitPutdown()
-//         // if (this.stopped) throw ['stopped']; // if stopped then quit
-
-//         return true;
-//     }
-// }
-
 class GoDeliver extends Plan {
 
     static isApplicableTo ( go_deliver ) {
@@ -513,7 +454,6 @@ class GoDeliver extends Plan {
     }
 
 }
-
 
 class BlindMove extends Plan {
 
@@ -572,8 +512,64 @@ class BlindMove extends Plan {
     }
 }
 
+class RandomMove extends Plan {
+
+    static isApplicableTo () {
+        // RandomMove is always applicable, it doesn't depend on any specific condition
+        return true;
+    }
+
+    async execute () {
+        while (true) {
+
+            if (this.stopped) throw ['stopped']; // if stopped then quit
+
+            // Generate a random direction
+            const directions = ['up', 'down', 'left', 'right'];
+            const randomDirection = directions[Math.floor(Math.random() * directions.length)];
+
+            let moveResult;
+
+            // Move in the randomly selected direction
+            switch (randomDirection) {
+                case 'up':
+                    moveResult = await client.emitMove('up');
+                    break;
+                case 'down':
+                    moveResult = await client.emitMove('down');
+                    break;
+                case 'left':
+                    moveResult = await client.emitMove('left');
+                    break;
+                case 'right':
+                    moveResult = await client.emitMove('right');
+                    break;
+                default:
+                    break;
+            }
+
+            // If the move was successful, update agent's position
+            if (moveResult) {
+                me.x = moveResult.x;
+                me.y = moveResult.y;
+            }
+
+            // Log for debugging
+            this.log(`Moved randomly: ${randomDirection}`);
+
+            // Small delay to avoid continuous rapid movement
+            await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second delay between moves
+
+            if (this.stopped) throw ['stopped']; // if stopped then quit
+        }
+
+        return true;
+    }
+}
+
 // plan classes are added to plan library 
 planLibrary.push( GoPickUp )
 planLibrary.push( GoDeliver )
 planLibrary.push( BlindMove )
+planLibrary.push( RandomMove )
 
