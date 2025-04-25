@@ -126,6 +126,7 @@ function optionsGeneration () {
             let [go_deliver,x,y] = option;
             let deliveryTile = nearestDelivery(me)
             let computedReward = carriedReward - carriedQty * MOVEMENT_DURATION/PARCEL_DECADING_INTERVAL * distance( me, deliveryTile );
+            console.log('Parcel Decading Interval', PARCEL_DECADING_INTERVAL, 'Movement Duration', MOVEMENT_DURATION, 'Distance', distance( me, deliveryTile ), 'Carried Reward', carriedReward, 'Carried Qty', carriedQty);
             console.log('Reward delivery', computedReward);
             return computedReward; // carried parcels value - cost for delivery
             
@@ -134,6 +135,7 @@ function optionsGeneration () {
             let [go_pick_up,x,y,id,reward] = option;
             let deliveryTile = nearestDelivery({x, y});
             let computedReward = carriedReward + reward - (carriedQty+1) * MOVEMENT_DURATION/PARCEL_DECADING_INTERVAL * (distance( {x, y}, me ) + distance( {x, y}, deliveryTile ) ); // parcel value - cost for pick up - cost for delivery
+            console.log('Parcel Decading Interval', PARCEL_DECADING_INTERVAL, 'Movement Duration', MOVEMENT_DURATION, 'Distance', distance( me, deliveryTile ), 'Carried Reward', carriedReward, 'Carried Qty', carriedQty);
             console.log('Reward pick up', computedReward);
             return computedReward;
         }
