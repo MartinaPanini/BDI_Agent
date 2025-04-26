@@ -2,416 +2,295 @@ import { DeliverooApi } from "@unitn-asa/deliveroo-js-client";
 import { a_star } from "./astar_search.js";
 import EventEmitter from "events";
 
-// TO DO:
-// - Adjust astar (agent keep moving against walls and don't found a solution)
-// - Add sensingOtherAgents (added, need to test)
-// - Add logic to manage other agents
-
+// — API Client Initialization
 const client = new DeliverooApi(
-    'https://deliveroojs2.rtibdi.disi.unitn.it/',
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImVjODgyNyIsIm5hbWUiOiJ0ZXN0Iiwicm9sZSI6InVzZXIiLCJpYXQiOjE3NDU2Njk4MDF9.qOnwzOc8Wf0mTO82v_5Q6cOI9e3nMQJ1zgjuVL2DVxk'
+  'https://deliveroojs2.rtibdi.disi.unitn.it/',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImVjODgyNyIsIm5hbWUiOiJ0ZXN0Iiwicm9sZSI6InVzZXIiLCJpYXQiOjE3NDU2Njk4MDF9.qOnwzOc8Wf0mTO82v_5Q6cOI9e3nMQJ1zgjuVL2DVxk'
 );
 
+// — Reassignable configuration vars
+let AGENTS_OBSERVATION_DISTANCE;
+let MOVEMENT_DURATION;
+let PARCEL_DECADING_INTERVAL;
+const DELIVERY_ZONE_THRESHOLD = 3;
+
+// — Helpers
 function distance({ x: x1, y: y1 }, { x: x2, y: y2 }) {
-    return Math.abs(Math.round(x1) - Math.round(x2)) + Math.abs(Math.round(y1) - Math.round(y2));
+  return Math.abs(Math.round(x1) - Math.round(x2))
+       + Math.abs(Math.round(y1) - Math.round(y2));
 }
 
-var AGENTS_OBSERVATION_DISTANCE, MOVEMENT_DURATION, PARCEL_DECADING_INTERVAL;
-const DELIVERY_ZONE_THRESHOLD = 5;
-
-client.onConfig((config) => {
-    AGENTS_OBSERVATION_DISTANCE = config.AGENTS_OBSERVATION_DISTANCE;
-    MOVEMENT_DURATION = config.MOVEMENT_DURATION;
-    PARCEL_DECADING_INTERVAL = config.PARCEL_DECADING_INTERVAL === '1s' ? 1000 : 1000000;
-});
-
+// — Map storage
 const map = {
-    width: undefined,
-    height: undefined,
-    tiles: new Map(),
-    add(tile) {
-        const { x, y } = tile;
-        return this.tiles.set(x + 1000 * y, tile);
-    },
-    xy(x, y) {
-        return this.tiles.get(x + 1000 * y);
-    }
+  width: 0,
+  height: 0,
+  tiles: new Map(),
+  add(tile) {
+    this.tiles.set(tile.x + 1000 * tile.y, tile);
+  },
+  xy(x, y) {
+    return this.tiles.get(Math.round(x) + 1000 * Math.round(y));
+  }
 };
 
+// — Config & map loading
+client.onConfig(config => {
+  AGENTS_OBSERVATION_DISTANCE = config.AGENTS_OBSERVATION_DISTANCE;
+  MOVEMENT_DURATION         = config.MOVEMENT_DURATION;
+  PARCEL_DECADING_INTERVAL  = config.PARCEL_DECADING_INTERVAL === '1s' ? 1000 : 1000000;
+});
+
 client.onMap((width, height, tiles) => {
-    map.width = width;
-    map.height = height;
-    for (const t of tiles) map.add(t);
+  map.width  = width;
+  map.height = height;
+  tiles.forEach(t => map.add(t));
 });
-
 client.onTile((x, y, delivery) => {
-    map.add({ x, y, delivery });
+  map.add({ x, y, type: delivery ? 2 : 1 });
 });
 
+// — Find nearest delivery spot
 function nearestDelivery({ x, y }) {
-    return Array.from(map.tiles.values()).filter(({ type }) => type === 2).sort((a, b) => distance(a, { x, y }) - distance(b, { x, y }))[0];
+  return Array
+    .from(map.tiles.values())
+    .filter(t => t.type === 2)
+    .sort((a, b) => distance(a, { x, y }) - distance(b, { x, y }))[0];
 }
 
+// — “Me” state
 const me = { id: null, name: null, x: null, y: null, score: null, carrying: new Map() };
-
 client.onYou(({ id, name, x, y, score }) => {
-    me.id = id;
-    me.name = name;
-    me.x = x;
-    me.y = y;
-    me.score = score;
+  Object.assign(me, { id, name, x, y, score });
 });
 
+// — Parcels sensing
 const parcels = new Map();
 const sensingEmitter = new EventEmitter();
-
-client.onParcelsSensing((perceived_parcels) => {
-    let new_parcel_sensed = false;
-    for (const p of perceived_parcels) {
-        if (!parcels.has(p.id)) new_parcel_sensed = true;
-        parcels.set(p.id, p);
-        if (p.carriedBy === me.id) me.carrying.set(p.id, p);
+client.onParcelsSensing(perceived => {
+  let newParcel = false;
+  perceived.forEach(p => {
+    if (!parcels.has(p.id)) newParcel = true;
+    parcels.set(p.id, p);
+    if (p.carriedBy === me.id) me.carrying.set(p.id, p);
+  });
+  for (const [id, p] of parcels) {
+    if (!perceived.find(q => q.id === id) && p.carriedBy === me.id) {
+      parcels.delete(id);
+      me.carrying.delete(id);
     }
-    for (const [id, p] of parcels.entries()) {
-        if (!perceived_parcels.find(q => q.id === id) && p.carriedBy === me.id) {
-            parcels.delete(id);
-            me.carrying.delete(id);
-        }
-    }
-    if (new_parcel_sensed) sensingEmitter.emit("new_parcel");
+  }
+  if (newParcel) sensingEmitter.emit("new_parcel");
 });
 
-const otherAgents = new Map();
-
-client.onOtherAgentsSensing((sensed_agents) => {
-    for (const { id, name, x, y, score } of sensed_agents) {
-        otherAgents.set(id, { id, x, y });
-    }
-    for (const [id, { x, y }] of otherAgents.entries()) {
-        if (distance(me, { x, y }) < AGENTS_OBSERVATION_DISTANCE && !sensed_agents.find((sensed) => id === sensed.id)) {
-            otherAgents.delete(id);
-        }
-    }
-    if (otherAgents.size > 0) sensingEmitter.emit("other_agents");
-});
-
+// — Option generation
 const optionsWithMetadata = new Map();
 function optionsGeneration() {
-    let carriedQty = me.carrying.size;
-    let carriedReward = Array.from(me.carrying.values()).reduce((acc, parcel) => acc + parcel.reward, 0);
-    const options = [];
+  const carriedQty    = me.carrying.size;
+  const carriedReward = Array.from(me.carrying.values()).reduce((a,p) => a + p.reward, 0);
+  const opts = [];
+  const deliveryTile = nearestDelivery(me);
+  if (!deliveryTile) return;
 
-    const deliveryTile = nearestDelivery(me);
-    if (!deliveryTile) {
-        //console.log('[optionsGeneration] No delivery tile available yet');
-        return;
-    }
-    const distanceToDelivery = distance(me, deliveryTile);
-    let deliveryUtility = 0;
-
-    if (carriedReward > 0) {
-        deliveryUtility = (distanceToDelivery < DELIVERY_ZONE_THRESHOLD)
-            ? 10000
-            : carriedReward - carriedQty * MOVEMENT_DURATION / PARCEL_DECADING_INTERVAL * distanceToDelivery;
-
-        const deliveryOption = ['go_deliver'];
-        deliveryOption._meta = { utility: deliveryUtility };
-        optionsWithMetadata.set(deliveryOption.join(','), deliveryOption._meta);
-        options.push(deliveryOption);
-    }
-
-    if (carriedReward > 0 && parcels.size === 0) {
-        const deliveryOption = ['go_deliver'];
-        deliveryOption._meta = { utility: carriedReward };
-        optionsWithMetadata.set(deliveryOption.join(','), deliveryOption._meta);
-        options.push(deliveryOption);
-    } else if (carriedReward <= 0 || parcels.size > 0) {
-        for (const parcel of parcels.values()) {
-            if (!parcel.carriedBy) {
-                const opt = ['go_pick_up', parcel.x, parcel.y, parcel.id, parcel.reward];
-                const utility = carriedReward + parcel.reward - (carriedQty + 1) * MOVEMENT_DURATION / PARCEL_DECADING_INTERVAL * (distance({ x: parcel.x, y: parcel.y }, me) + distance({ x: parcel.x, y: parcel.y }, deliveryTile));
-                opt._meta = { utility };
-                optionsWithMetadata.set(opt.join(','), opt._meta);
-                options.push(opt);
-            }
-        }
-    } else {
-        const randomMoveOption = ['random_move'];
-        randomMoveOption._meta = { utility: 0 };
-        optionsWithMetadata.set(randomMoveOption.join(','), randomMoveOption._meta);
-        options.push(randomMoveOption);
-    }
-
-    options.sort((a, b) => b._meta.utility - a._meta.utility);
-    for (const opt of options) myAgent.push(opt);
-    //console.log('[optionsGeneration] Carried:', carriedReward, 'Parcels visible:', parcels.size);
-    //console.log('[optionsGeneration] Generated options:', options.map(opt => opt.join(',')));
-
+  const d2d = distance(me, deliveryTile);
+  if (carriedReward > 0) {
+    const util = (d2d < DELIVERY_ZONE_THRESHOLD)
+      ? carriedReward
+      : carriedReward - carriedQty * MOVEMENT_DURATION / PARCEL_DECADING_INTERVAL * d2d;
+    const o = ['go_deliver'];
+    o._meta = { utility: util };
+    optionsWithMetadata.set(o.join(','), o._meta);
+    opts.push(o);
+  }
+  if (carriedReward <= 0 || parcels.size > 0) {
+    parcels.forEach(parcel => {
+      if (!parcel.carriedBy) {
+        const util = carriedReward + parcel.reward
+          - (carriedQty + 1) * MOVEMENT_DURATION / PARCEL_DECADING_INTERVAL
+          * (distance(me, parcel) + distance(parcel, deliveryTile));
+        const o = ['go_pick_up', parcel.x, parcel.y, parcel.id, parcel.reward];
+        o._meta = { utility: util };
+        optionsWithMetadata.set(o.join(','), o._meta);
+        opts.push(o);
+      }
+    });
+  }
+  opts.sort((a, b) => b._meta.utility - a._meta.utility);
+  opts.forEach(o => myAgent.push(o));
+  
 }
 
 client.onYou(optionsGeneration);
 client.onParcelsSensing(optionsGeneration);
 
+// — Intention revision base
 class IntentionRevision {
-    #intention_queue = [];
-    get intention_queue() { return this.#intention_queue; }
+  #intention_queue = [];
+  get intention_queue() { return this.#intention_queue; }
 
-    async loop() {
-        while (true) {
-            if (this.intention_queue.length > 0) {
-                const intention = this.intention_queue[0];
-                console.log('[Intention loop] Pursuing:', intention.predicate);
-                const id = intention.predicate[2];
-                const parcel = parcels.get(id);
-                if (parcel && parcel.carriedBy) continue;
-                await intention.achieve().catch(() => {});
-                this.intention_queue.shift();
-            }
-            await new Promise(resolve => setImmediate(resolve));
-        }
+  async loop() {
+    while (true) {
+      if (this.intention_queue.length > 0) {
+        const intent = this.intention_queue[0];
+        console.log('[Intention loop] Pursuing:', intent.predicate);
+        const id = intent.predicate[2];
+        const p  = parcels.get(id);
+        if (p && p.carriedBy) { this.intention_queue.shift(); continue; }
+        await intent.achieve().catch(() => {});
+        this.intention_queue.shift();
+      }
+      await new Promise(r => setImmediate(r));
     }
+  }
 }
 
+// — Replace revision policy
 class IntentionRevisionReplace extends IntentionRevision {
-    async push(predicate) {
-        const key = predicate.join(',');
-        const newMeta = optionsWithMetadata.get(key);
-        const newUtility = newMeta?.utility ?? 0;
+  async push(predicate) {
+    const key     = predicate.join(',');
+    const newMeta = optionsWithMetadata.get(key) ?? { utility: 0 };
+    const newU    = newMeta.utility;
 
-        const current = this.intention_queue[0];
-        if (current) {
-            const currKey = current.predicate.join(',');
-            const currentMeta = optionsWithMetadata.get(currKey);
-            const currUtility = currentMeta?.utility ?? 0;
-
-            if (currKey === key || newUtility <= currUtility) return;
-            current.stop();
-            this.intention_queue.shift();
-        }
-
-        const intention = new Intention(this, predicate);
-        intention.utility = newUtility;
-        this.intention_queue.unshift(intention);
+    const current = this.intention_queue[0];
+    if (current) {
+      const curKey = current.predicate.join(',');
+      const curMeta = optionsWithMetadata.get(curKey) ?? { utility: 0 };
+      if (curKey === key || newU <= curMeta.utility) return;
+      current.stop();
+      this.intention_queue.shift();
     }
+    const intent = new Intention(this, predicate);
+    intent.utility = newU;
+    this.intention_queue.unshift(intent);
+  }
 }
 
-const myAgent = new IntentionRevisionReplace();
-myAgent.loop();
-
+// — Intention & Plan base
 class Intention {
-    #predicate;
-    #parent;
-    #current_plan;
-    #started = false;
-    #stopped = false;
+  #predicate; #parent; #current_plan; #started = false; #stopped = false;
+  constructor(parent, predicate) { this.#parent = parent; this.#predicate = predicate; }
+  get predicate() { return this.#predicate; }
+  get stopped() { return this.#stopped; }
+  stop() { this.#stopped = true; if (this.#current_plan) this.#current_plan.stop(); }
 
-    constructor(parent, predicate) {
-        this.#parent = parent;
-        this.#predicate = predicate;
+  async achieve() {
+    if (this.#started) return this;
+    this.#started = true;
+    for (const PlanClass of planLibrary) {
+      if (this.stopped) throw ['stopped', ...this.predicate];
+      if (PlanClass.isApplicableTo(...this.predicate)) {
+        this.#current_plan = new PlanClass(this.#parent);
+        try { return await this.#current_plan.execute(...this.predicate); }
+        catch (e) { optionsGeneration(); }
+      }
     }
-
-    get predicate() { return this.#predicate; }
-    get stopped() { return this.#stopped; }
-    stop() { this.#stopped = true; if (this.#current_plan) this.#current_plan.stop(); }
-
-    async achieve() {
-        if (this.#started) return this;
-        this.#started = true;
-        for (const planClass of planLibrary) {
-            if (this.stopped) throw ['stopped intention', ...this.predicate];
-            if (planClass.isApplicableTo(...this.predicate)) {
-                this.#current_plan = new planClass(this.#parent);
-                try {
-                    return await this.#current_plan.execute(...this.predicate);
-                } catch (e) { optionsGeneration(); }
-            }
-        }
-        if (this.stopped) throw ['stopped intention', ...this.predicate];
-        throw ['no plan satisfied the intention', ...this.predicate];
-    }
+    if (this.stopped) throw ['stopped', ...this.predicate];
+    throw ['no plan for', ...this.predicate];
+  }
 }
-
-const planLibrary = [];
 
 class Plan {
-    #sub_intentions = [];
-    #parent;
-    #stopped = false;
-
-    constructor(parent) { this.#parent = parent; }
-    stop() { this.#stopped = true; for (const i of this.#sub_intentions) i.stop(); }
-    get stopped() { return this.#stopped; }
-    async subIntention(predicate) {
-        const sub = new Intention(this, predicate);
-        this.#sub_intentions.push(sub);
-        return sub.achieve();
-    }
+  #sub = []; #parent; #stopped = false;
+  constructor(parent) { this.#parent = parent; }
+  get stopped() { return this.#stopped; }
+  stop() { this.#stopped = true; this.#sub.forEach(s => s.stop()); }
+  async subIntention(pred) {
+    const i = new Intention(this, pred);
+    this.#sub.push(i);
+    return i.achieve();
+  }
 }
 
+// — GoPickUp & GoDeliver
 class GoPickUp extends Plan {
-    static isApplicableTo(a, x, y, id) { return a === 'go_pick_up'; }
-    async execute(_, x, y) {
-        await this.subIntention(['go_to', x, y]);
-        await client.emitPickup();
-        return true;
-    }
+  static isApplicableTo(a, x, y) { return a === 'go_pick_up'; }
+  async execute(_, x, y) {
+    await this.subIntention(['go_to', x, y]);
+    await client.emitPickup();
+    return true;
+  }
 }
-
 class GoDeliver extends Plan {
-    static isApplicableTo(a) { return a === 'go_deliver'; }
-    async execute() {
-        const tile = nearestDelivery(me);
-        await this.subIntention(['go_to', tile.x, tile.y]);
-        await client.emitPutdown();
-        return true;
-    }
+  static isApplicableTo(a) { return a === 'go_deliver'; }
+  async execute() {
+    const tile = nearestDelivery(me);
+    await this.subIntention(['go_to', tile.x, tile.y]);
+    await client.emitPutdown();
+    return true;
+  }
 }
 
+// — A* movement with proper wall checks & retry/backoff
 class AStarMove extends Plan {
-    static isApplicableTo(a, x, y) {
-        return a === 'go_to';
-    }
+  static isApplicableTo(a) { return a === 'go_to'; }
 
-    async execute(_, x, y) {
-        const isWall = (x, y) => {
-            const tile = map.xy(x, y);
-            if (!tile) return true; // No tile -> Wall
-            return false; // Tile exists -> Free
-        };
+  async execute(_, x, y) {
+    // now properly checks tile.type === 0 for walls
+    const isWall = (xx, yy) => {
+      const t = map.xy(xx, yy);
+      if (!t)      return true;      // outside bounds
+      if (t.type===0) return true;  // real wall
+      return false;
+    };
 
-        console.log(`[AStarMove] Planning path from (${me.x},${me.y}) to (${x},${y})`);
+    //console.log(`[AStarMove] Planning from (${me.x},${me.y}) to (${x},${y})`);
+    let path = a_star({ x: me.x, y: me.y }, { x, y }, isWall);
+    if (!path.length) throw ['no path'];
 
-        // Compute the path using A* search
-        const path = a_star({ x: me.x, y: me.y }, { x, y }, isWall);
+    console.log(`[AStarMove] Path:`, path.map(p=>`(${p.x},${p.y})`).join('->'));
 
-        if (!path.length) {
-            console.error('[AStarMove] No path found!');
-            for (let y = 0; y < map.height; y++) {
-                let row = '';
-                for (let x = 0; x < map.width; x++) {
-                    row += isWall(x, y) ? 'X' : ' ';
-                }
-                console.log(row); // Log each row of the grid for visual debugging
-            }
-            throw ['no path found'];
+    for (const step of path.slice(1)) {
+      if (this.stopped) throw ['stopped'];
+      //console.log(`[AStarMove] Step to (${step.x},${step.y})`);
+
+      let success = false, retries = 0;
+      const MAX_RETRIES = 5;
+
+      while (!success) {
+        if (this.stopped) throw ['stopped'];
+
+        let r;
+        if      (step.x>me.x) r = await client.emitMove('right');
+        else if (step.x<me.x) r = await client.emitMove('left');
+        else if (step.y>me.y) r = await client.emitMove('up');
+        else if (step.y<me.y) r = await client.emitMove('down');
+
+        if (r) {
+          me.x = r.x; me.y = r.y;
+          success = true;
+        } else {
+          retries++;
+          if (retries > MAX_RETRIES) {
+            console.error('[AStarMove] Too many retries, aborting');
+            throw ['too many retries'];
+          }
+          console.warn(`[AStarMove] Blocked at (${step.x},${step.y}), retry #${retries}`);
+          await new Promise(res => setTimeout(res, 300));
+          path = a_star({ x: me.x, y: me.y }, { x, y }, isWall);
+          if (!path.length) throw ['no replan path'];
+          break;  // break inner loop, go reprocess new path
         }
-
-        console.log(`[AStarMove] Path computed:`, path.map(p => `(${p.x},${p.y})`).join(' -> '));
-
-        // Move through the path and handle any blocked moves dynamically
-        for (const step of path.slice(1)) {
-            if (this.stopped) throw ['stopped'];
-
-            console.log(`[AStarMove] Moving to: (${step.x},${step.y})`);
-
-            let r;
-            let moveSuccessful = false;
-
-            // Try moving to the next step until successful
-            while (!moveSuccessful) {
-                if (this.stopped) throw ['stopped'];
-
-                // Attempt to move to the next step
-                if (step.x > me.x) r = await client.emitMove('right');
-                else if (step.x < me.x) r = await client.emitMove('left');
-                else if (step.y > me.y) r = await client.emitMove('up');
-                else if (step.y < me.y) r = await client.emitMove('down');
-
-                // If the move is successful, update the position and break out of the loop
-                if (r) {
-                    me.x = r.x;
-                    me.y = r.y;
-                    moveSuccessful = true;
-                } else {
-                    console.error(`[AStarMove] Failed move to (${step.x},${step.y}), re-planning...`);
-
-                    // Re-plan the path if blocked
-                    const newPath = a_star({ x: me.x, y: me.y }, { x, y }, isWall);
-                    if (newPath.length) {
-                        console.log('[AStarMove] Re-planning path...');
-                        path.splice(1, path.length - 1, ...newPath.slice(1));
-                        break; // Retry with new path
-                    } else {
-                        console.error('[AStarMove] No valid path found after replanning!');
-                        throw ['no valid path after replan'];
-                    }
-                }
-            }
-        }
-
-        return true;
+      }
     }
+    return true;
+  }
 }
 
+// — Random fallback
 class RandomMove extends Plan {
-    static isApplicableTo(a) { return a === 'random_move'; }
-    async execute() {
-        while (true) {
-            if (this.stopped) throw ['stopped'];
-            const dirs = ['up', 'down', 'left', 'right'];
-            const dir = dirs[Math.floor(Math.random() * dirs.length)];
-            const r = await client.emitMove(dir);
-            if (r) { me.x = r.x; me.y = r.y; }
-            await new Promise(res => setTimeout(res, 1000));
-        }
+  static isApplicableTo(a) { return a==='random_move'; }
+  async execute() {
+    const dirs = ['up','down','left','right'];
+    while (!this.stopped) {
+      const dir = dirs[Math.floor(Math.random()*4)];
+      const r = await client.emitMove(dir);
+      if (r) { me.x=r.x; me.y=r.y; }
+      await new Promise(r=>setTimeout(r,500));
     }
+    throw ['stopped'];
+  }
 }
 
-class BlindMove extends Plan {
-
-    static isApplicableTo ( go_to, x, y ) {
-        return go_to == 'go_to';
-    }
-
-    async execute ( go_to, x, y ) {
-
-        while ( me.x != x || me.y != y ) {
-
-            if ( this.stopped ) throw ['stopped']; // if stopped then quit
-
-            let moved_horizontally;
-            let moved_vertically;
-            
-            // this.log('me', me, 'xy', x, y);
-
-            if ( x > me.x )
-                moved_horizontally = await client.emitMove('right')
-                // status_x = await this.subIntention( 'go_to', {x: me.x+1, y: me.y} );
-            else if ( x < me.x )
-                moved_horizontally = await client.emitMove('left')
-                // status_x = await this.subIntention( 'go_to', {x: me.x-1, y: me.y} );
-
-            if (moved_horizontally) {
-                me.x = moved_horizontally.x;
-                me.y = moved_horizontally.y;
-            }
-
-            if ( this.stopped ) throw ['stopped']; // if stopped then quit
-
-            if ( y > me.y )
-                moved_vertically = await client.emitMove('up')
-                // status_x = await this.subIntention( 'go_to', {x: me.x, y: me.y+1} );
-            else if ( y < me.y )
-                moved_vertically = await client.emitMove('down')
-                // status_x = await this.subIntention( 'go_to', {x: me.x, y: me.y-1} );
-
-            if (moved_vertically) {
-                me.x = moved_vertically.x;
-                me.y = moved_vertically.y;
-            }
-            
-            if ( ! moved_horizontally && ! moved_vertically) {
-                this.log('stucked');
-                throw 'stucked';
-            } else if ( me.x == x && me.y == y ) {
-                // this.log('target reached');
-            }
-            
-        }
-
-        return true;
-
-    }
-}
-
-planLibrary.push(GoPickUp, GoDeliver, RandomMove, AStarMove);
+// — Assemble plan library & start
+const planLibrary = [ GoPickUp, GoDeliver, RandomMove, AStarMove ];
+const myAgent = new IntentionRevisionReplace();
+myAgent.loop();
