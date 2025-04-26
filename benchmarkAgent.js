@@ -15,7 +15,7 @@ import depth_search_daemon from "./depth_search_daemon.js";
 const client = new DeliverooApi(
     'https://deliveroojs2.rtibdi.disi.unitn.it/',
     // Token for testing
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjQxYzdhYiIsIm5hbWUiOiJ0ZXN0Iiwicm9sZSI6InVzZXIiLCJpYXQiOjE3NDUzMDY1ODJ9.474kBOhupyTQ3GflIZVjm6xwYMTSPKzrTm1wBWnhHyA'
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImVjODgyNyIsIm5hbWUiOiJ0ZXN0Iiwicm9sZSI6InVzZXIiLCJpYXQiOjE3NDU2Njk4MDF9.qOnwzOc8Wf0mTO82v_5Q6cOI9e3nMQJ1zgjuVL2DVxk'
 )
 const depth_search = depth_search_daemon(client);
 

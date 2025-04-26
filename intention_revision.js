@@ -1,12 +1,10 @@
-// --- intention_revision.js (with A* integration) ---
-
 import { DeliverooApi } from "@unitn-asa/deliveroo-js-client";
 import { a_star } from "./astar_search.js";
 import EventEmitter from "events";
 
 const client = new DeliverooApi(
     'https://deliveroojs2.rtibdi.disi.unitn.it/',
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjQxYzdhYiIsIm5hbWUiOiJ0ZXN0Iiwicm9sZSI6InVzZXIiLCJpYXQiOjE3NDUzMDY1ODJ9.474kBOhupyTQ3GflIZVjm6xwYMTSPKzrTm1wBWnhHyA'
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImVjODgyNyIsIm5hbWUiOiJ0ZXN0Iiwicm9sZSI6InVzZXIiLCJpYXQiOjE3NDU2Njk4MDF9.qOnwzOc8Wf0mTO82v_5Q6cOI9e3nMQJ1zgjuVL2DVxk'
 );
 
 function distance({ x: x1, y: y1 }, { x: x2, y: y2 }) {
@@ -85,6 +83,10 @@ function optionsGeneration() {
     const options = [];
 
     const deliveryTile = nearestDelivery(me);
+    if (!deliveryTile) {
+        //console.log('[optionsGeneration] No delivery tile available yet');
+        return;
+    }
     const distanceToDelivery = distance(me, deliveryTile);
     let deliveryUtility = 0;
 
@@ -123,6 +125,9 @@ function optionsGeneration() {
 
     options.sort((a, b) => b._meta.utility - a._meta.utility);
     for (const opt of options) myAgent.push(opt);
+    //console.log('[optionsGeneration] Carried:', carriedReward, 'Parcels visible:', parcels.size);
+    //console.log('[optionsGeneration] Generated options:', options.map(opt => opt.join(',')));
+
 }
 
 client.onYou(optionsGeneration);
@@ -136,6 +141,7 @@ class IntentionRevision {
         while (true) {
             if (this.intention_queue.length > 0) {
                 const intention = this.intention_queue[0];
+                console.log('[Intention loop] Pursuing:', intention.predicate);
                 const id = intention.predicate[2];
                 const parcel = parcels.get(id);
                 if (parcel && parcel.carriedBy) continue;
@@ -243,23 +249,77 @@ class GoDeliver extends Plan {
 }
 
 class AStarMove extends Plan {
-    static isApplicableTo(a, x, y) { return a === 'go_to'; }
-    async execute(_, x, y) {
-        const isWall = (x, y) => { const t = map.xy(x, y); return !t || t.type === 1; };
-        const path = a_star({ x: me.x, y: me.y }, { x, y }, isWall);
-        if (!path.length) throw ['no path found'];
+    static isApplicableTo(a, x, y) {
+        return a === 'go_to';
+    }
 
+    async execute(_, x, y) {
+        const isWall = (x, y) => {
+            const tile = map.xy(x, y);
+            if (!tile) return true; // No tile -> Wall
+            return false; // Tile exists -> Free
+        };
+
+        console.log(`[AStarMove] Planning path from (${me.x},${me.y}) to (${x},${y})`);
+
+        // Compute the path using A* search
+        const path = a_star({ x: me.x, y: me.y }, { x, y }, isWall);
+
+        if (!path.length) {
+            console.error('[AStarMove] No path found!');
+            for (let y = 0; y < map.height; y++) {
+                let row = '';
+                for (let x = 0; x < map.width; x++) {
+                    row += isWall(x, y) ? 'X' : ' ';
+                }
+                console.log(row); // Log each row of the grid for visual debugging
+            }
+            throw ['no path found'];
+        }
+
+        console.log(`[AStarMove] Path computed:`, path.map(p => `(${p.x},${p.y})`).join(' -> '));
+
+        // Move through the path and handle any blocked moves dynamically
         for (const step of path.slice(1)) {
             if (this.stopped) throw ['stopped'];
+
+            console.log(`[AStarMove] Moving to: (${step.x},${step.y})`);
+
             let r;
-            if (step.x > me.x) r = await client.emitMove('right');
-            else if (step.x < me.x) r = await client.emitMove('left');
-            else if (step.y > me.y) r = await client.emitMove('up');
-            else if (step.y < me.y) r = await client.emitMove('down');
-            if (!r) throw ['blocked'];
-            me.x = r.x;
-            me.y = r.y;
+            let moveSuccessful = false;
+
+            // Try moving to the next step until successful
+            while (!moveSuccessful) {
+                if (this.stopped) throw ['stopped'];
+
+                // Attempt to move to the next step
+                if (step.x > me.x) r = await client.emitMove('right');
+                else if (step.x < me.x) r = await client.emitMove('left');
+                else if (step.y > me.y) r = await client.emitMove('up');
+                else if (step.y < me.y) r = await client.emitMove('down');
+
+                // If the move is successful, update the position and break out of the loop
+                if (r) {
+                    me.x = r.x;
+                    me.y = r.y;
+                    moveSuccessful = true;
+                } else {
+                    console.error(`[AStarMove] Failed move to (${step.x},${step.y}), re-planning...`);
+
+                    // Re-plan the path if blocked
+                    const newPath = a_star({ x: me.x, y: me.y }, { x, y }, isWall);
+                    if (newPath.length) {
+                        console.log('[AStarMove] Re-planning path...');
+                        path.splice(1, path.length - 1, ...newPath.slice(1));
+                        break; // Retry with new path
+                    } else {
+                        console.error('[AStarMove] No valid path found after replanning!');
+                        throw ['no valid path after replan'];
+                    }
+                }
+            }
         }
+
         return true;
     }
 }
@@ -278,4 +338,61 @@ class RandomMove extends Plan {
     }
 }
 
-planLibrary.push(GoPickUp, GoDeliver, AStarMove, RandomMove);
+class BlindMove extends Plan {
+
+    static isApplicableTo ( go_to, x, y ) {
+        return go_to == 'go_to';
+    }
+
+    async execute ( go_to, x, y ) {
+
+        while ( me.x != x || me.y != y ) {
+
+            if ( this.stopped ) throw ['stopped']; // if stopped then quit
+
+            let moved_horizontally;
+            let moved_vertically;
+            
+            // this.log('me', me, 'xy', x, y);
+
+            if ( x > me.x )
+                moved_horizontally = await client.emitMove('right')
+                // status_x = await this.subIntention( 'go_to', {x: me.x+1, y: me.y} );
+            else if ( x < me.x )
+                moved_horizontally = await client.emitMove('left')
+                // status_x = await this.subIntention( 'go_to', {x: me.x-1, y: me.y} );
+
+            if (moved_horizontally) {
+                me.x = moved_horizontally.x;
+                me.y = moved_horizontally.y;
+            }
+
+            if ( this.stopped ) throw ['stopped']; // if stopped then quit
+
+            if ( y > me.y )
+                moved_vertically = await client.emitMove('up')
+                // status_x = await this.subIntention( 'go_to', {x: me.x, y: me.y+1} );
+            else if ( y < me.y )
+                moved_vertically = await client.emitMove('down')
+                // status_x = await this.subIntention( 'go_to', {x: me.x, y: me.y-1} );
+
+            if (moved_vertically) {
+                me.x = moved_vertically.x;
+                me.y = moved_vertically.y;
+            }
+            
+            if ( ! moved_horizontally && ! moved_vertically) {
+                this.log('stucked');
+                throw 'stucked';
+            } else if ( me.x == x && me.y == y ) {
+                // this.log('target reached');
+            }
+            
+        }
+
+        return true;
+
+    }
+}
+
+planLibrary.push(GoPickUp, GoDeliver, RandomMove, AStarMove);
