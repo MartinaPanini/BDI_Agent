@@ -13,6 +13,11 @@ let AGENTS_OBSERVATION_DISTANCE;
 let MOVEMENT_DURATION;
 let PARCEL_DECADING_INTERVAL;
 const DELIVERY_ZONE_THRESHOLD = 3;
+// how close another agent must be to “contest” a parcel
+const OTHER_AGENT_CONTEST_DIST = 2;
+// when contested, scale utility by this (0 = ignore entirely; 1 = no penalty)
+const CONTESTED_UTILITY_FACTOR = 0.5;
+
 
 // — Helpers
 function distance({ x: x1, y: y1 }, { x: x2, y: y2 }) {
@@ -82,45 +87,71 @@ client.onParcelsSensing(perceived => {
   if (newParcel) sensingEmitter.emit("new_parcel");
 });
 
+// — Track other agents in sight
+const otherAgents = new Map();
+
+client.onAgentsSensing(sensed_agents => {
+  otherAgents.clear();
+  for (const a of sensed_agents) {
+    otherAgents.set(a.id, { x: a.x, y: a.y });
+  }
+});
+
 // — Option generation
 const optionsWithMetadata = new Map();
 function optionsGeneration() {
-  const carriedQty    = me.carrying.size;
-  const carriedReward = Array.from(me.carrying.values()).reduce((a,p) => a + p.reward, 0);
-  const opts = [];
-  const deliveryTile = nearestDelivery(me);
-  if (!deliveryTile) return;
-
-  const d2d = distance(me, deliveryTile);
-  if (carriedReward > 0) {
-    const util = (d2d < DELIVERY_ZONE_THRESHOLD)
-      ? carriedReward
-      : carriedReward - carriedQty * MOVEMENT_DURATION / PARCEL_DECADING_INTERVAL * d2d;
-    const o = ['go_deliver'];
-    o._meta = { utility: util };
-    optionsWithMetadata.set(o.join(','), o._meta);
-    opts.push(o);
-  }
-  if (carriedReward <= 0 || parcels.size > 0) {
-    parcels.forEach(parcel => {
-      if (!parcel.carriedBy) {
-        const util = carriedReward + parcel.reward
-          - (carriedQty + 1) * MOVEMENT_DURATION / PARCEL_DECADING_INTERVAL
-          * (distance(me, parcel) + distance(parcel, deliveryTile));
+    const carriedQty    = me.carrying.size;
+    const carriedReward = Array
+      .from(me.carrying.values())
+      .reduce((sum, p) => sum + p.reward, 0);
+  
+    const opts = [];
+    const deliveryTile = nearestDelivery(me);
+    if (!deliveryTile) return;
+  
+    // 1) Deliver option (if carrying something)
+    const d2d = distance(me, deliveryTile);
+    if (carriedReward > 0) {
+      const util = (d2d < DELIVERY_ZONE_THRESHOLD)
+        ? carriedReward
+        : carriedReward - carriedQty * MOVEMENT_DURATION / PARCEL_DECADING_INTERVAL * d2d;
+  
+      const o = ['go_deliver'];
+      o._meta = { utility: util };
+      optionsWithMetadata.set(o.join(','), o._meta);
+      opts.push(o);
+    }
+  
+    // 2) Pick‐up options (including contested penalty)
+    if (carriedReward <= 0 || parcels.size > 0) {
+      parcels.forEach(parcel => {
+        if (parcel.carriedBy) return;
+  
+        // base utility = total reward minus travel cost
+        let util = carriedReward + parcel.reward - (carriedQty + 1) * MOVEMENT_DURATION / PARCEL_DECADING_INTERVAL * (distance(me, parcel) + distance(parcel, deliveryTile));
+  
+        // if any other agent is within contest distance, penalize
+        for (const other of otherAgents.values()) {
+          if (distance(other, parcel) <= OTHER_AGENT_CONTEST_DIST) { util *= CONTESTED_UTILITY_FACTOR;
+            break;
+          }
+        }
+  
         const o = ['go_pick_up', parcel.x, parcel.y, parcel.id, parcel.reward];
         o._meta = { utility: util };
         optionsWithMetadata.set(o.join(','), o._meta);
         opts.push(o);
-      }
-    });
-  }
-  opts.sort((a, b) => b._meta.utility - a._meta.utility);
-  opts.forEach(o => myAgent.push(o));
+      });
+    }
   
-}
+    // 3) Sort & push to agent
+    opts.sort((a, b) => b._meta.utility - a._meta.utility);
+    opts.forEach(o => myAgent.push(o));
+  }  
 
 client.onYou(optionsGeneration);
 client.onParcelsSensing(optionsGeneration);
+client.onAgentsSensing(optionsGeneration);
 
 // — Intention revision base
 class IntentionRevision {
