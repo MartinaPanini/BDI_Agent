@@ -2,6 +2,11 @@ import { DeliverooApi } from "@unitn-asa/deliveroo-js-client";
 import { a_star } from "./astar_search.js";
 import EventEmitter from "events";
 
+// TO DO:
+// - Adjust astar (agent keep moving against walls and don't found a solution)
+// - Add sensingOtherAgents (added, need to test)
+// - Add logic to manage other agents
+
 const client = new DeliverooApi(
     'https://deliveroojs2.rtibdi.disi.unitn.it/',
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImVjODgyNyIsIm5hbWUiOiJ0ZXN0Iiwicm9sZSI6InVzZXIiLCJpYXQiOjE3NDU2Njk4MDF9.qOnwzOc8Wf0mTO82v_5Q6cOI9e3nMQJ1zgjuVL2DVxk'
@@ -74,6 +79,20 @@ client.onParcelsSensing((perceived_parcels) => {
         }
     }
     if (new_parcel_sensed) sensingEmitter.emit("new_parcel");
+});
+
+const otherAgents = new Map();
+
+client.onOtherAgentsSensing((sensed_agents) => {
+    for (const { id, name, x, y, score } of sensed_agents) {
+        otherAgents.set(id, { id, x, y });
+    }
+    for (const [id, { x, y }] of otherAgents.entries()) {
+        if (distance(me, { x, y }) < AGENTS_OBSERVATION_DISTANCE && !sensed_agents.find((sensed) => id === sensed.id)) {
+            otherAgents.delete(id);
+        }
+    }
+    if (otherAgents.size > 0) sensingEmitter.emit("other_agents");
 });
 
 const optionsWithMetadata = new Map();
