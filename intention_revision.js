@@ -2,6 +2,9 @@ import { DeliverooApi } from "@unitn-asa/deliveroo-js-client";
 import { a_star } from "./astar_search.js";
 import EventEmitter from "events";
 
+// CHIEDERE
+// - Random move fa andare l'agente contro il muro nonostante il controllo
+
 // API Initialization
 const client = new DeliverooApi(
     'https://deliveroojs2.rtibdi.disi.unitn.it/',
@@ -123,7 +126,7 @@ function optionsGeneration() {
     parcels.forEach(parcel => {
         // Only consider parcels within the observation distance
         const d = distance(me, parcel);
-        if (!parcel.carriedBy && !blockedParcels.has(parcel.id) && d <= AGENTS_OBSERVATION_DISTANCE) {
+        if (!parcel.carriedBy && !blockedParcels.has(parcel.id) && d <= AGENTS_OBSERVATION_DISTANCE && !me.carrying.has(parcel.id)) {
             let penalty = 0;
 
             // Check if another agent is near this parcel
@@ -138,10 +141,7 @@ function optionsGeneration() {
                 }
             }
 
-            const util = carriedReward + parcel.reward
-              - (carriedQty + 1) * MOVEMENT_DURATION / PARCEL_DECADING_INTERVAL
-              * (distance(me, parcel) + distance(parcel, deliveryTile))
-              - penalty;
+            const util = carriedReward + parcel.reward - (carriedQty + 1) * MOVEMENT_DURATION / PARCEL_DECADING_INTERVAL * (distance(me, parcel) + distance(parcel, deliveryTile)) - penalty;
 
             const o = ['go_pick_up', parcel.x, parcel.y, parcel.id, parcel.reward];
             o._meta = { utility: util };
@@ -151,13 +151,21 @@ function optionsGeneration() {
     });
   }
 
-  opts.sort((a, b) => b._meta.utility - a._meta.utility);
-  opts.forEach(o => myAgent.push(o));
-}
+    opts.sort((a, b) => b._meta.utility - a._meta.utility);
+    opts.forEach(o => myAgent.push(o));
 
+    // If no options were generated, fallback to random movement
+    if (opts.length === 0) {
+        console.log('[OptionsGeneration] No valid options, falling back to random movement.');
+        const randomMove = ['random_move'];
+        myAgent.push(randomMove);
+    }
+    console.log('Option Sorted ', opts)
+}
 
 client.onYou(optionsGeneration);
 client.onParcelsSensing(optionsGeneration);
+client.onAgentsSensing(optionsGeneration);
 
 // Intention and Plans
 class IntentionRevision {
@@ -269,7 +277,14 @@ class GoDeliver extends Plan {
     async execute() {
         const tile = nearestDelivery(me);
         await this.subIntention(['go_to', tile.x, tile.y]);
-        await client.emitPutdown();
+        const success = await client.emitPutdown();
+        if (success) {
+            me.carrying.clear();  // 💥 reset immediato del carico!
+            console.log("[GoDeliver] Successfully delivered, clearing carrying parcels.");
+        } else {
+            console.error("[GoDeliver] Delivery failed!");
+            throw ['delivery_failed'];
+        }
         return true;
     }
 }
@@ -314,16 +329,43 @@ class AStarMove extends Plan {
 }
 class RandomMove extends Plan {
     static isApplicableTo(a) { return a === 'random_move'; }
+  
     async execute() {
         const dirs = ['up', 'down', 'left', 'right'];
+  
+        const isWall = (xx, yy) => {
+            const t = map.xy(xx, yy);
+            if (!t) return true;
+            return (t.type === 0);
+        };
+  
         while (!this.stopped) {
             const dir = dirs[Math.floor(Math.random() * 4)];
+            let newX = me.x;
+            let newY = me.y;
+  
+            if (dir === 'up') newY--;
+            else if (dir === 'down') newY++;
+            else if (dir === 'left') newX--;
+            else if (dir === 'right') newX++;
+  
+            if (isWall(newX, newY)) {
+                console.log(`[RandomMove] Bloccato dal muro a (${newX}, ${newY}), riprovo.`);
+                await new Promise(r => setTimeout(r, 100)); // Aspetta un po' prima di riprovare
+                continue;
+            }
+  
             const r = await client.emitMove(dir);
-            if (r) { me.x = r.x; me.y = r.y; }
-            await new Promise(r => setTimeout(r, 500));
+            if (r) {
+                me.x = r.x;
+                me.y = r.y;
+                // console.log(`[RandomMove] Mi sono mosso a ${dir} in (${me.x}, ${me.y})`);
+            }
+  
+            await new Promise(r => setTimeout(r, 100));
         }
     }
-}
+  }
 
 // Plan library
 const planLibrary = [GoPickUp, GoDeliver, RandomMove, AStarMove];
