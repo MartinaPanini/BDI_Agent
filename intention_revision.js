@@ -62,22 +62,28 @@ client.onYou(({ id, name, x, y, score }) => {
 // Parcels
 const parcels = new Map();
 const sensingEmitter = new EventEmitter();
-client.onParcelsSensing(perceived => {
-    let newParcel = false;
-    perceived.forEach(p => {
-        if (!parcels.has(p.id)) newParcel = true;
-        parcels.set(p.id, p);
-        if (p.carriedBy === me.id) me.carrying.set(p.id, p);
-    });
-    for (const [id, p] of parcels) {
-        if (!perceived.find(q => q.id === id) && p.carriedBy === me.id) {
-            parcels.delete(id);
-            me.carrying.delete(id);
-        }
-    }
-    if (newParcel) sensingEmitter.emit("new_parcel");
+client.onParcelsSensing((perceived) => {
+  let newParcel = false;
+  perceived.forEach(p => {
+      const d = distance(me, p); // Distance between me and the parcel
+      if (!parcels.has(p.id) && d <= AGENTS_OBSERVATION_DISTANCE) {  // Only consider parcels within range
+          newParcel = true;
+          parcels.set(p.id, p);
+      }
+      if (p.carriedBy === me.id) me.carrying.set(p.id, p);
+  });
+
+  for (const [id, p] of parcels) {
+      if (!perceived.find(q => q.id === id) && p.carriedBy === me.id) {
+          parcels.delete(id);
+          me.carrying.delete(id);
+      }
+  }
+
+  if (newParcel) sensingEmitter.emit("new_parcel");
 });
 
+let otherAgents = new Map();
 client.onAgentsSensing((agents) => {
   otherAgents.clear();
   for (const agent of agents) {
@@ -95,11 +101,11 @@ client.onAgentsSensing((agents) => {
 const optionsWithMetadata = new Map();
 function optionsGeneration() {
   optionsWithMetadata.clear();
-
   const carriedQty = me.carrying.size;
   const carriedReward = Array.from(me.carrying.values()).reduce((a, p) => a + p.reward, 0);
   const opts = [];
   const deliveryTile = nearestDelivery(me);
+
   if (!deliveryTile) return;
 
   const d2d = distance(me, deliveryTile);
@@ -114,23 +120,41 @@ function optionsGeneration() {
   }
 
   if (carriedReward <= 0 || parcels.size > 0) {
-      parcels.forEach(parcel => {
-          // 🆕 SKIP parcels in blockedParcels
-          if (!parcel.carriedBy && !blockedParcels.has(parcel.id)) {
-              const util = carriedReward + parcel.reward
-                - (carriedQty + 1) * MOVEMENT_DURATION / PARCEL_DECADING_INTERVAL
-                * (distance(me, parcel) + distance(parcel, deliveryTile));
-              const o = ['go_pick_up', parcel.x, parcel.y, parcel.id, parcel.reward];
-              o._meta = { utility: util };
-              optionsWithMetadata.set(o.join(','), o._meta);
-              opts.push(o);
-          }
-      });
+    parcels.forEach(parcel => {
+        // Only consider parcels within the observation distance
+        const d = distance(me, parcel);
+        if (!parcel.carriedBy && !blockedParcels.has(parcel.id) && d <= AGENTS_OBSERVATION_DISTANCE) {
+            let penalty = 0;
+
+            // Check if another agent is near this parcel
+            for (const other of otherAgents.values()) {
+                const agentDistance = distance(parcel, other);
+                if (agentDistance <= 1) {
+                    penalty *= 2; // Heavier penalty if close
+                } else if (agentDistance <= 2) {
+                    penalty *= 1.5; // Moderate penalty
+                } else if (agentDistance <= 3) {
+                    penalty *= 1.25; // Small penalty
+                }
+            }
+
+            const util = carriedReward + parcel.reward
+              - (carriedQty + 1) * MOVEMENT_DURATION / PARCEL_DECADING_INTERVAL
+              * (distance(me, parcel) + distance(parcel, deliveryTile))
+              - penalty;
+
+            const o = ['go_pick_up', parcel.x, parcel.y, parcel.id, parcel.reward];
+            o._meta = { utility: util };
+            optionsWithMetadata.set(o.join(','), o._meta);
+            opts.push(o);
+        }
+    });
   }
 
   opts.sort((a, b) => b._meta.utility - a._meta.utility);
   opts.forEach(o => myAgent.push(o));
 }
+
 
 client.onYou(optionsGeneration);
 client.onParcelsSensing(optionsGeneration);
