@@ -78,6 +78,19 @@ client.onParcelsSensing(perceived => {
     if (newParcel) sensingEmitter.emit("new_parcel");
 });
 
+client.onAgentsSensing((agents) => {
+  otherAgents.clear();
+  for (const agent of agents) {
+    if (agent.id !== me.id) { // Skip myself
+        const d = distance(me, agent);  // Distance between me and the agent
+        if (d <= AGENTS_OBSERVATION_DISTANCE) {
+            otherAgents.set(agent.id, agent); // Add agent to perception if within range
+        }
+    }
+  }
+});
+
+
 // Option generation
 const optionsWithMetadata = new Map();
 function optionsGeneration() {
