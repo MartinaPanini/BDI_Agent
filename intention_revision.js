@@ -2,9 +2,6 @@ import { DeliverooApi } from "@unitn-asa/deliveroo-js-client";
 import { a_star } from "./astar_search.js";
 import EventEmitter from "events";
 
-// CHIEDERE
-// - Random move fa andare l'agente contro il muro nonostante il controllo
-
 // API Initialization
 const client = new DeliverooApi(
     'https://deliveroojs2.rtibdi.disi.unitn.it/',
@@ -17,11 +14,24 @@ let MOVEMENT_DURATION;
 let PARCEL_DECADING_INTERVAL;
 const DELIVERY_ZONE_THRESHOLD = 3;
 const blockedParcels = new Set();
-
+const visitedTiles = new Map();
 
 // Helpers
 function distance({ x: x1, y: y1 }, { x: x2, y: y2 }) {
     return Math.abs(Math.round(x1) - Math.round(x2)) + Math.abs(Math.round(y1) - Math.round(y2));
+}
+
+function recordVisit(x, y) {
+    const key = `${Math.round(x)},${Math.round(y)}`;
+    visitedTiles.set(key, (visitedTiles.get(key) || 0) + 1);
+}
+// Helper to determine direction from coordinates
+function getDirection(x1, y1, x2, y2) {
+    if (x2 > x1) return 'right';
+    if (x2 < x1) return 'left';
+    if (y2 > y1) return 'up';
+    if (y2 < y1) return 'down';
+    return null;
 }
 
 // Map
@@ -103,65 +113,60 @@ client.onAgentsSensing((agents) => {
 // Option generation
 const optionsWithMetadata = new Map();
 function optionsGeneration() {
-  optionsWithMetadata.clear();
-  const carriedQty = me.carrying.size;
-  const carriedReward = Array.from(me.carrying.values()).reduce((a, p) => a + p.reward, 0);
-  const opts = [];
-  const deliveryTile = nearestDelivery(me);
+    optionsWithMetadata.clear();
+    const carriedQty = me.carrying.size;
+    const carriedReward = Array.from(me.carrying.values()).reduce((a, p) => a + p.reward, 0);
+    const opts = [];
+    const deliveryTile = nearestDelivery(me);
 
-  if (!deliveryTile) return;
+    if (!deliveryTile) return;
 
-  const d2d = distance(me, deliveryTile);
-  if (carriedReward > 0) {
-      const util = (d2d < DELIVERY_ZONE_THRESHOLD)
-        ? carriedReward
-        : carriedReward - carriedQty * MOVEMENT_DURATION / PARCEL_DECADING_INTERVAL * d2d;
-      const o = ['go_deliver'];
-      o._meta = { utility: util };
-      optionsWithMetadata.set(o.join(','), o._meta);
-      opts.push(o);
-  }
+    const d2d = distance(me, deliveryTile);
+    if (carriedReward > 0) {
+        const util = (d2d < DELIVERY_ZONE_THRESHOLD)
+            ? carriedReward
+            : carriedReward - carriedQty * MOVEMENT_DURATION / PARCEL_DECADING_INTERVAL * d2d;
+        const o = ['go_deliver'];
+        o._meta = { utility: util };
+        optionsWithMetadata.set(o.join(','), o._meta);
+        opts.push(o);
+    }
 
-  if (carriedReward <= 0 || parcels.size > 0) {
-    parcels.forEach(parcel => {
-        // Only consider parcels within the observation distance
-        const d = distance(me, parcel);
-        if (!parcel.carriedBy && !blockedParcels.has(parcel.id) && d <= AGENTS_OBSERVATION_DISTANCE && !me.carrying.has(parcel.id)) {
-            let penalty = 0;
-
-            // Check if another agent is near this parcel
-            for (const other of otherAgents.values()) {
-                const agentDistance = distance(parcel, other);
-                if (agentDistance <= 1) {
-                    penalty *= 2; // Heavier penalty if close
-                } else if (agentDistance <= 2) {
-                    penalty *= 1.5; // Moderate penalty
-                } else if (agentDistance <= 3) {
-                    penalty *= 1.25; // Small penalty
+    if (carriedReward <= 0 || parcels.size > 0) {
+        parcels.forEach(parcel => {
+            const d = distance(me, parcel);
+            if (!parcel.carriedBy && !blockedParcels.has(parcel.id) && d <= AGENTS_OBSERVATION_DISTANCE && !me.carrying.has(parcel.id)) {
+                let penalty = 0;
+                for (const other of otherAgents.values()) {
+                    const agentDistance = distance(parcel, other);
+                    if (agentDistance <= 1) penalty *= 2;
+                    else if (agentDistance <= 2) penalty *= 1.5;
+                    else if (agentDistance <= 3) penalty *= 1.25;
                 }
+
+                const util = carriedReward + parcel.reward - (carriedQty + 1) * MOVEMENT_DURATION / PARCEL_DECADING_INTERVAL * (distance(me, parcel) + distance(parcel, deliveryTile)) - penalty;
+
+                const o = ['go_pick_up', parcel.x, parcel.y, parcel.id, parcel.reward];
+                o._meta = { utility: util };
+                optionsWithMetadata.set(o.join(','), o._meta);
+                opts.push(o);
             }
-
-            const util = carriedReward + parcel.reward - (carriedQty + 1) * MOVEMENT_DURATION / PARCEL_DECADING_INTERVAL * (distance(me, parcel) + distance(parcel, deliveryTile)) - penalty;
-
-            const o = ['go_pick_up', parcel.x, parcel.y, parcel.id, parcel.reward];
-            o._meta = { utility: util };
-            optionsWithMetadata.set(o.join(','), o._meta);
-            opts.push(o);
-        }
-    });
-  }
+        });
+    }
 
     opts.sort((a, b) => b._meta.utility - a._meta.utility);
-    opts.forEach(o => myAgent.push(o));
 
-    // If no options were generated, fallback to random movement
-    if (opts.length === 0) {
-        console.log('[OptionsGeneration] No valid options, falling back to random movement.');
-        const randomMove = ['random_move'];
-        myAgent.push(randomMove);
+    // Push highest-utility option to intention queue
+    if (opts.length > 0) {
+        myAgent.push(opts[0]);  // <-- QUESTA È LA PARTE CRUCIALE
+    } else {
+        console.log('[OptionsGeneration] No valid options, falling back to smart exploration.');
+        myAgent.push(['smart_explore']);
     }
-    console.log('Option Sorted ', opts)
+
+    console.log('Option Sorted ', opts);
 }
+
 
 client.onYou(optionsGeneration);
 client.onParcelsSensing(optionsGeneration);
@@ -173,39 +178,40 @@ class IntentionRevision {
     get intention_queue() { return this.#intention_queue; }
 
     async loop() {
-      while (true) {
-          if (this.intention_queue.length > 0) {
-              const intention = this.intention_queue[0];
-              console.log('[Intention loop] Pursuing:', intention.predicate);
-  
-              try {
-                  await intention.achieve();
-                  this.intention_queue.shift();
-              } catch (err) {
-                console.error('[Intention loop] Failed intention:', intention.predicate, 'Error:', err);
-                this.intention_queue.shift();
-            
-                const failedKey = intention.predicate.join(',');
-                if (optionsWithMetadata.has(failedKey)) {
-                    console.log(`[Intention loop] Removing failed option: ${failedKey}`);
-                    optionsWithMetadata.delete(failedKey);
-                }
-            
-                // 🆕 If it's a go_pick_up that failed, blacklist the parcel id
-                if (intention.predicate[0] === 'go_pick_up') {
-                    const parcelId = intention.predicate[3];
-                    if (parcelId) {
-                        console.warn(`[Intention loop] Blacklisting unreachable parcel: ${parcelId}`);
-                        blockedParcels.add(parcelId);
+        while (true) {
+            if (this.intention_queue.length > 0) {
+                const intention = this.intention_queue[0];
+                console.log('[Intention loop] Pursuing:', intention.predicate);
+    
+                try {
+                    await intention.achieve();
+                    console.log('[Intention loop] Completed intention:', intention.predicate);
+                    this.intention_queue.shift();
+                } catch (err) {
+                    console.error('[Intention loop] Failed intention:', intention.predicate, 'Error:', err);
+                    this.intention_queue.shift();
+    
+                    const failedKey = intention.predicate.join(',');
+                    if (optionsWithMetadata.has(failedKey)) {
+                        console.log(`[Intention loop] Removing failed option: ${failedKey}`);
+                        optionsWithMetadata.delete(failedKey);
                     }
-                }    
-                optionsGeneration();
-                console.log('Regenerating options')
-            }       
-          }
-          await new Promise(r => setImmediate(r));
-      }
-  }  
+    
+                    if (intention.predicate[0] === 'go_pick_up') {
+                        const parcelId = intention.predicate[3];
+                        if (parcelId) {
+                            console.warn(`[Intention loop] Blacklisting unreachable parcel: ${parcelId}`);
+                            blockedParcels.add(parcelId);
+                        }
+                    }
+    
+                    optionsGeneration();
+                    console.log('Regenerating options');
+                }
+            }
+            await new Promise(r => setImmediate(r));
+        }
+    } 
 }
 
 class IntentionRevisionReplace extends IntentionRevision {
@@ -215,18 +221,35 @@ class IntentionRevisionReplace extends IntentionRevision {
         const newU = newMeta.utility;
 
         const current = this.intention_queue[0];
-        if (current) {
-            const curKey = current.predicate.join(',');
-            const curMeta = optionsWithMetadata.get(curKey) ?? { utility: 0 };
-            if (curKey === key || newU <= curMeta.utility) return;
-            current.stop();
-            this.intention_queue.shift();
+
+        // Se non c'è nulla in coda → accoda nuova intenzione
+        if (!current) {
+            const intent = new Intention(this, predicate);
+            intent.utility = newU;
+            this.intention_queue.unshift(intent);
+            return;
         }
+
+        const curKey = current.predicate.join(',');
+        const curMeta = optionsWithMetadata.get(curKey) ?? { utility: 0 };
+        const curU = curMeta.utility;
+
+        // FORZA la sostituzione se quella attuale è 'smart_explore'
+        const shouldReplace =
+            curKey === 'smart_explore' ||
+            key !== curKey && newU > curU;
+
+        if (!shouldReplace) return;
+
+        current.stop();
+        this.intention_queue.shift();
+
         const intent = new Intention(this, predicate);
         intent.utility = newU;
         this.intention_queue.unshift(intent);
     }
 }
+
 
 class Intention {
     #predicate; #parent; #current_plan; #started = false; #stopped = false;
@@ -266,12 +289,24 @@ class Plan {
 // Plans
 class GoPickUp extends Plan {
     static isApplicableTo(a) { return a === 'go_pick_up'; }
-    async execute(_, x, y) {
+    async execute(_, x, y, parcelId) {
+
         await this.subIntention(['go_to', x, y]);
-        await client.emitPickup();
+        const success = await client.emitPickup();
+        if (!success) {
+            console.error("[GoPickUp] Pickup failed, throwing error");
+            throw ['pickup_failed'];
+        }
+        const picked = parcels.get(parcelId);
+        if (picked) {
+            me.carrying.set(parcelId, picked);
+            parcels.delete(parcelId);
+        }
         return true;
     }
 }
+
+
 class GoDeliver extends Plan {
     static isApplicableTo(a) { return a === 'go_deliver'; }
     async execute() {
@@ -279,15 +314,15 @@ class GoDeliver extends Plan {
         await this.subIntention(['go_to', tile.x, tile.y]);
         const success = await client.emitPutdown();
         if (success) {
-            me.carrying.clear();  // 💥 reset immediato del carico!
-            console.log("[GoDeliver] Successfully delivered, clearing carrying parcels.");
+            me.carrying.clear();
         } else {
-            console.error("[GoDeliver] Delivery failed!");
+            console.error("[GoDeliver] Delivery failed, throwing error");
             throw ['delivery_failed'];
         }
         return true;
     }
 }
+
 class AStarMove extends Plan {
     static isApplicableTo(a) { return a === 'go_to'; }
 
@@ -298,13 +333,11 @@ class AStarMove extends Plan {
             return (t.type === 0);
         };
 
-        console.log(`[AStarMove] Planning from (${me.x},${me.y}) to (${x},${y})`);
         let path = a_star({ x: me.x, y: me.y }, { x, y }, isWall);
         if (!path.length) {
             console.error(`[AStarMove] No path to goal.`);
             throw ['no path'];
         }
-        console.log(`[AStarMove] Path:`, path.map(p => `(${p.x},${p.y})`).join('->'));
 
         for (const step of path.slice(1)) {
             if (this.stopped) throw ['stopped'];
@@ -350,7 +383,6 @@ class RandomMove extends Plan {
             else if (dir === 'right') newX++;
   
             if (isWall(newX, newY)) {
-                console.log(`[RandomMove] Bloccato dal muro a (${newX}, ${newY}), riprovo.`);
                 await new Promise(r => setTimeout(r, 100)); // Aspetta un po' prima di riprovare
                 continue;
             }
@@ -359,7 +391,7 @@ class RandomMove extends Plan {
             if (r) {
                 me.x = r.x;
                 me.y = r.y;
-                // console.log(`[RandomMove] Mi sono mosso a ${dir} in (${me.x}, ${me.y})`);
+                console.log(`[RandomMove] Mi sono mosso a ${dir} in (${me.x}, ${me.y})`);
             }
   
             await new Promise(r => setTimeout(r, 100));
@@ -367,8 +399,95 @@ class RandomMove extends Plan {
     }
   }
 
+  class SmartExploreSafeZone extends Plan {
+    static isApplicableTo(a) { return a === 'smart_explore'; }
+
+    async execute() {
+        const center = { x: map.width / 2, y: map.height / 2 };
+
+        const isWall = (xx, yy) => {
+            const t = map.xy(xx, yy);
+            return (!t || t.type === 0);
+        };
+
+        function isAgentNearby(x, y) {
+            for (const agent of otherAgents.values()) {
+                const d = Math.abs(Math.round(agent.x) - x) + Math.abs(Math.round(agent.y) - y);
+                if (d <= 1) return true;
+            }
+            return false;
+        }
+
+        function scoreMove(x, y) {
+            const key = `${x},${y}`;
+            const visits = visitedTiles.get(key) || 0;
+            const distToCenter = Math.abs(center.x - x) + Math.abs(center.y - y);
+            return visits + distToCenter * 0.1;
+        }
+
+        // 1) primo tentativo sui vicini diretti
+        const neighbors = [
+            { x: me.x + 1, y: me.y },
+            { x: me.x - 1, y: me.y },
+            { x: me.x,     y: me.y + 1 },
+            { x: me.x,     y: me.y - 1 },
+        ].filter(n => !isWall(n.x, n.y) && !isAgentNearby(n.x, n.y));
+
+        let candidates = neighbors.map(n => ({
+            x: n.x,
+            y: n.y,
+            dir: getDirection(me.x, me.y, n.x, n.y),
+            visits: visitedTiles.get(`${n.x},${n.y}`) || 0,
+            score: scoreMove(n.x, n.y)
+        }));
+
+        // solo quelli non troppo battuti
+        candidates = candidates.filter(c => c.visits < 5);
+
+        if (candidates.length > 0) {
+            candidates.sort((a, b) => a.score - b.score);
+            const best = candidates[0];
+            console.log(`[SmartExploreSafeZone] Stepping ${best.dir} to (${best.x},${best.y})`);
+            const r = await client.emitMove(best.dir);
+            if (r) {
+                me.x = r.x; me.y = r.y;
+                recordVisit(me.x, me.y);
+            }
+            optionsGeneration();
+            return true;
+        }
+
+        // 2) se non ci sono vicini utili → cerca un "frontier tile" lontano e inesplorato
+        const allFrontiers = Array.from(map.tiles.values())
+            .filter(t => !isWall(t.x, t.y)
+                       && !isAgentNearby(t.x, t.y)
+                       && (visitedTiles.get(`${t.x},${t.y}`) || 0) === 0);
+
+        if (allFrontiers.length > 0) {
+            // trovo quello che massimizza la distanza da me
+            allFrontiers.sort((a, b) => {
+                const da = Math.abs(me.x - a.x) + Math.abs(me.y - a.y);
+                const db = Math.abs(me.x - b.x) + Math.abs(me.y - b.y);
+                return db - da;
+            });
+            const target = allFrontiers[0];
+            console.log(`[SmartExploreSafeZone] No neighbor left, A* to frontier (${target.x},${target.y})`);
+            await this.subIntention(['go_to', target.x, target.y]);
+            recordVisit(me.x, me.y);
+            optionsGeneration();
+            return true;
+        }
+
+        // 3) se anche la frontiera è esaurita → attendo e rigenero
+        console.warn("[SmartExploreSafeZone] Mappa esplorata / bloccato. Attendo 500ms.");
+        await new Promise(r => setTimeout(r, 500));
+        optionsGeneration();
+        return true;
+    }
+}
+
 // Plan library
-const planLibrary = [GoPickUp, GoDeliver, RandomMove, AStarMove];
+const planLibrary = [GoPickUp, GoDeliver, RandomMove, AStarMove, SmartExploreSafeZone];
 
 // Start agent
 const myAgent = new IntentionRevisionReplace();
