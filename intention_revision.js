@@ -399,7 +399,7 @@ class RandomMove extends Plan {
     }
   }
 
-  class SmartExploreSafeZone extends Plan {
+  class SmartExplore extends Plan {
     static isApplicableTo(a) { return a === 'smart_explore'; }
 
     async execute() {
@@ -487,7 +487,7 @@ class RandomMove extends Plan {
 }
 
 // Plan library
-const planLibrary = [GoPickUp, GoDeliver, RandomMove, AStarMove, SmartExploreSafeZone];
+const planLibrary = [GoPickUp, GoDeliver, RandomMove, AStarMove, SmartExplore];
 
 // Start agent
 const myAgent = new IntentionRevisionReplace();
