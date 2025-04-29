@@ -1,6 +1,8 @@
 import { DeliverooApi } from "@unitn-asa/deliveroo-js-client";
 import { a_star } from "./astar_search.js";
 import EventEmitter from "events";
+import { PddlProblem, onlineSolver } from "@unitn-asa/pddl-client";
+
 
 // API Initialization
 const client = new DeliverooApi(
@@ -15,6 +17,19 @@ let PARCEL_DECADING_INTERVAL;
 const DELIVERY_ZONE_THRESHOLD = 3;
 const blockedParcels = new Set();
 const visitedTiles = new Map();
+
+// PDDL
+import fs from 'fs';
+function readFile(path) {
+    return new Promise((res, rej) => {
+        fs.readFile(path, 'utf8', (err, data) => {
+            if (err) rej(err)
+            else res(data)
+        })
+    })
+}
+let domain = await readFile('./domain-deliveroo.pddl');
+let usePDDL = false;
 
 // Helpers
 function distance({ x: x1, y: y1 }, { x: x2, y: y2 }) {
@@ -122,29 +137,48 @@ function optionsGeneration() {
     if (!deliveryTile) return;
 
     const d2d = distance(me, deliveryTile);
+
+    // === DELIVERY OPTION ===
     if (carriedReward > 0) {
-        const util = (d2d < DELIVERY_ZONE_THRESHOLD)
-            ? carriedReward
-            : carriedReward - carriedQty * MOVEMENT_DURATION / PARCEL_DECADING_INTERVAL * d2d;
+        // Penalità se altri agenti sono vicini alla zona di consegna
+        let deliveryPenalty = 0;
+        for (const agent of otherAgents.values()) {
+            const d = distance(agent, deliveryTile);
+            if (d <= 1) deliveryPenalty += 5;
+            else if (d <= 2) deliveryPenalty += 3;
+            else if (d <= 3) deliveryPenalty += 1;
+        }
+
+        const util = (
+            (d2d < DELIVERY_ZONE_THRESHOLD)
+                ? carriedReward
+                : carriedReward - carriedQty * MOVEMENT_DURATION / PARCEL_DECADING_INTERVAL * d2d
+        ) - deliveryPenalty;
+
         const o = ['go_deliver'];
         o._meta = { utility: util };
         optionsWithMetadata.set(o.join(','), o._meta);
         opts.push(o);
     }
 
+    // === PICKUP OPTIONS ===
     if (carriedReward <= 0 || parcels.size > 0) {
         parcels.forEach(parcel => {
             const d = distance(me, parcel);
             if (!parcel.carriedBy && !blockedParcels.has(parcel.id) && d <= AGENTS_OBSERVATION_DISTANCE && !me.carrying.has(parcel.id)) {
-                let penalty = 0;
-                for (const other of otherAgents.values()) {
-                    const agentDistance = distance(parcel, other);
-                    if (agentDistance <= 1) penalty *= 2;
-                    else if (agentDistance <= 2) penalty *= 1.5;
-                    else if (agentDistance <= 3) penalty *= 1.25;
+                let agentPenalty = 0;
+
+                for (const agent of otherAgents.values()) {
+                    const agentDistance = distance(parcel, agent);
+                    if (agentDistance <= 1) agentPenalty += 5;
+                    else if (agentDistance <= 2) agentPenalty += 3;
+                    else if (agentDistance <= 3) agentPenalty += 1;
                 }
 
-                const util = carriedReward + parcel.reward - (carriedQty + 1) * MOVEMENT_DURATION / PARCEL_DECADING_INTERVAL * (distance(me, parcel) + distance(parcel, deliveryTile)) - penalty;
+                const totalDistance = distance(me, parcel) + distance(parcel, deliveryTile);
+                const decayPenalty = (carriedQty + 1) * MOVEMENT_DURATION / PARCEL_DECADING_INTERVAL * totalDistance;
+
+                const util = carriedReward + parcel.reward - decayPenalty - agentPenalty;
 
                 const o = ['go_pick_up', parcel.x, parcel.y, parcel.id, parcel.reward];
                 o._meta = { utility: util };
@@ -154,14 +188,14 @@ function optionsGeneration() {
         });
     }
 
+    // === Sort and select ===
     opts.sort((a, b) => b._meta.utility - a._meta.utility);
 
-    // Push highest-utility option to intention queue
     if (opts.length > 0) {
-        myAgent.push(opts[0]);  // <-- QUESTA È LA PARTE CRUCIALE
+        myAgent.push(opts[0]);
     } else {
         console.log('[OptionsGeneration] No valid options, falling back to smart exploration.');
-        myAgent.push(['smart_explore']);
+        myAgent.push(['explore']);
     }
 
     console.log('Option Sorted ', opts);
@@ -306,7 +340,6 @@ class GoPickUp extends Plan {
     }
 }
 
-
 class GoDeliver extends Plan {
     static isApplicableTo(a) { return a === 'go_deliver'; }
     async execute() {
@@ -400,7 +433,7 @@ class RandomMove extends Plan {
   }
 
   class SmartExplore extends Plan {
-    static isApplicableTo(a) { return a === 'smart_explore'; }
+    static isApplicableTo(a) { return a === 'explore'; }
 
     async execute() {
         const center = { x: map.width / 2, y: map.height / 2 };
@@ -486,8 +519,215 @@ class RandomMove extends Plan {
     }
 }
 
-// Plan library
-const planLibrary = [GoPickUp, GoDeliver, RandomMove, AStarMove, SmartExplore];
+// ==== PDDL ====
+class PddlMove extends Plan {
+
+    static isApplicableTo(go_to, x, y) {
+        return go_to == 'go_to';
+    }
+
+    async execute(go_to, x, y) {
+        // Define the PDDL goal
+        let goal = 'at t' + x + '_' + y;
+
+        // Update the beliefset with the map updated with position of enemies and others...
+        MyMap.updateBeliefset();
+
+        // Create the PDDL problem
+        var pddlProblem = new PddlProblem(
+            'deliveroo',
+            MyMap.myBeliefset.objects.join(' '),
+            MyMap.myBeliefset.toPddlString() + ' ' + '(at t' + MyData.pos.x + '_' + MyData.pos.y + ')',
+            goal
+        );
+
+        let problem = pddlProblem.toPddlString();
+
+        // Get the plan from the online solver
+        var plan = await onlineSolver(domain, problem);
+
+        // Parse the plan to get the path
+        let path = []
+        plan.forEach(action => {
+            let end = action.args[1].split('_');
+            path.push({
+                x: parseInt(end[0].substring(1)),
+                y: parseInt(end[1])
+            });
+        });
+
+        // Set the countStacked to 1 if the agent is a SLAVE, otherwise to 12
+        // We use two different stucked because if the MASTER Stuck the SLAVE the SLAVE escape before the MASTER 
+        if (MyData.role == "MASTER") {
+            var countStacked = 12
+        }
+        else {
+            var countStacked = 2
+        }
+
+        // Get the deliveries and parcels on the path to pick up or put down is pass through them
+        let deliveriesOnPath = [];
+        let parcelsOnPath = [];
+
+        for (let del of MyMap.deliveryCoordinates) {
+            for (let p of path) {
+                if (del.x == p.x && del.y == p.y) {
+                    deliveriesOnPath.push(del);
+                }
+            }
+        }
+
+        for (let par of MyData.parcels) {
+            for (let p of path) {
+                if (par.x == p.x && par.y == p.y && (p.x != x && p.y != y)) {
+                    parcelsOnPath.push(par);
+                }
+            }
+        }
+
+        // Start moving the agent to the target position
+        while (MyData.pos.x != x || MyData.pos.y != y) {
+
+            // Check if the agent is on a delivery point or a parcel point
+            if (deliveriesOnPath.some(del => positionsEqual(del, MyData.pos))) {
+                if (this.stopped) throw ['stopped']; // if stopped then quit
+                await client.putdown()
+                if (this.stopped) throw ['stopped']; // if stopped then quit
+            }
+
+            if (parcelsOnPath.some(par => positionsEqual(par, MyData.pos))) {
+
+                if (this.stopped) throw ['stopped']; // if stopped then quit
+                // Pickup the parcel
+                await client.pickup();
+                if (this.stopped) throw ['stopped']; // if stopped then quit
+
+                // Add parcels to MyData.parcelsInMind if they match the current position
+                parcelsOnPath.forEach(par => {
+                    if (par.x === MyData.pos.x && par.y === MyData.pos.y) {
+                        MyData.parcelsInMind.push(par.id);
+                    }
+                });
+
+                if (this.stopped) throw ['stopped']; // if stopped then quit
+            }
+
+            // Get the next coordinate to move to
+            let coordinate = path.shift()
+            let status_x = false;
+            let status_y = false;
+
+            if (coordinate.x == MyData.pos.x && coordinate.y == MyData.pos.y) {
+                continue;
+            }
+
+            if (coordinate.x > MyData.pos.x)
+                status_x = await client.move('right')
+            else if (coordinate.x < MyData.pos.x)
+                status_x = await client.move('left')
+
+            if (status_x) {
+                MyData.pos.x = status_x.x;
+                MyData.pos.y = status_x.y;
+            }
+
+            if (this.stopped) throw ['stopped']; // if stopped then quit
+
+            if (coordinate.y > MyData.pos.y)
+                status_y = await client.move('up')
+            else if (coordinate.y < MyData.pos.y)
+                status_y = await client.move('down')
+
+            if (status_y) {
+                MyData.pos.x = status_y.x;
+                MyData.pos.y = status_y.y;
+            }
+
+            // If the agent is stucked, wait for 500ms and try again
+            if (!status_x && !status_y) {
+                this.log('stucked ', countStacked);
+                await timeout(500)
+                if (countStacked <= 0) {
+                    throw 'stopped';
+                } else {
+                    countStacked -= 1;
+                }
+
+            } else if (MyData.pos.x == x && MyData.pos.y == y) {
+                // this.log('target reached');
+            }
+        }
+        return true;
+    }
+}
+
+/**
+ * PddlPickUp class that extends Plan, used to pick up a parcel
+ */
+class PddlPickUp extends Plan {
+    static isApplicableTo(go_pick_up, x, y) {
+        return go_pick_up == 'go_pick_up';
+    }
+
+    async execute(go_pick_up, x, y) {
+
+        // Check if the agent is on the parcel position and pick it up 
+        if (MyData.pos.x == x && MyData.pos.y == y) {
+            if (this.stopped) throw ['stopped']; // if stopped then quit
+            await client.pickup()
+            if (this.stopped) throw ['stopped']; // if stopped then quit
+            return true;
+        }
+
+        // Move the agent to the parcel position and pick it up
+        if (this.stopped) throw ['stopped']; // if stopped then quit
+        await this.subIntention(['go_to', x, y]);
+        if (this.stopped) throw ['stopped']; // if stopped then quit
+        await client.pickup()
+        if (this.stopped) throw ['stopped']; // if stopped then quit
+
+        return true;
+    }
+}
+
+/**
+ * PddlPutDown class that extends Plan, used to put down a parcel
+ */
+class PddlPutDown extends Plan {
+
+    static isApplicableTo(go_put_down, x, y) {
+        return go_put_down == 'go_put_down';
+    }
+
+    async execute(go_put_down, x, y) {
+
+        // Check if the agent is on the delivery point and put down the parcel
+        if (MyData.pos.x == x && MyData.pos.y == y) {
+            if (this.stopped) throw ['stopped']; // if stopped then quit
+            await client.putdown()
+            if (this.stopped) throw ['stopped']; // if stopped then quit
+            return true;
+        }
+
+        // Move the agent to the delivery point and put down the parcel
+        if (this.stopped) throw ['stopped']; // if stopped then quit
+        await this.subIntention(['go_to', x, y]);
+        if (this.stopped) throw ['stopped']; // if stopped then quit
+        await client.putdown()
+        if (this.stopped) throw ['stopped']; // if stopped then quit
+
+        return true;
+    }
+}
+
+
+const planLibrary = [];
+
+if (usePDDL) {
+  planLibrary.push(PddlMove, PddlPickUp, PddlPutDown, SmartExplore);
+} else {
+  planLibrary.push(AStarMove, GoPickUp, GoDeliver, SmartExplore);
+}
 
 // Start agent
 const myAgent = new IntentionRevisionReplace();
