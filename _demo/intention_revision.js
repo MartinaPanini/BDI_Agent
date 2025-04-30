@@ -14,6 +14,7 @@ const client = new DeliverooApi(
 let AGENTS_OBSERVATION_DISTANCE;
 let MOVEMENT_DURATION;
 let PARCEL_DECADING_INTERVAL;
+let PARCEL_OBSERVATION_DISTANCE;
 const DELIVERY_ZONE_THRESHOLD = 3;
 const blockedParcels = new Set();
 const visitedTiles = new Map();
@@ -63,8 +64,10 @@ client.onConfig(config => {
     AGENTS_OBSERVATION_DISTANCE = config.AGENTS_OBSERVATION_DISTANCE;
     MOVEMENT_DURATION = config.MOVEMENT_DURATION;
     PARCEL_DECADING_INTERVAL = config.PARCEL_DECADING_INTERVAL === '1s' ? 1000 : 1000000;
+    PARCEL_OBSERVATION_DISTANCE = config.PARCEL_OBSERVATION_DISTANCE;
 });
 
+//console.log('PARCEL ',  PARCEL_OBSERVATION_DISTANCE) // UNDEFINED
 client.onMap((width, height, tiles) => {
     map.width = width;
     map.height = height;
@@ -95,8 +98,8 @@ client.onParcelsSensing((perceived) => {
   perceived.forEach(p => {
       const d = distance(me, p); // Distance between me and the parcel
       if (!parcels.has(p.id) && d <= AGENTS_OBSERVATION_DISTANCE) {  // Only consider parcels within range
-          newParcel = true;
-          parcels.set(p.id, p);
+        newParcel = true;
+        parcels.set(p.id, p);
       }
       if (p.carriedBy === me.id) me.carrying.set(p.id, p);
   });
@@ -123,7 +126,6 @@ client.onAgentsSensing((agents) => {
     }
   }
 });
-
 
 // Option generation
 const optionsWithMetadata = new Map();
@@ -166,19 +168,19 @@ function optionsGeneration() {
         parcels.forEach(parcel => {
             const d = distance(me, parcel);
             if (!parcel.carriedBy && !blockedParcels.has(parcel.id) && d <= AGENTS_OBSERVATION_DISTANCE && !me.carrying.has(parcel.id)) {
-                let agentPenalty = 0;
+                let agentPenalty = 1;
 
                 for (const agent of otherAgents.values()) {
                     const agentDistance = distance(parcel, agent);
-                    if (agentDistance <= 1) agentPenalty += 5;
-                    else if (agentDistance <= 2) agentPenalty += 3;
-                    else if (agentDistance <= 3) agentPenalty += 1;
+                    if (agentDistance <= 1) agentPenalty = 0.5;
+                    else if (agentDistance <= 2) agentPenalty = 0.75;
+                    else if (agentDistance <= 3) agentPenalty = 0.9;
                 }
 
                 const totalDistance = distance(me, parcel) + distance(parcel, deliveryTile);
                 const decayPenalty = (carriedQty + 1) * MOVEMENT_DURATION / PARCEL_DECADING_INTERVAL * totalDistance;
 
-                const util = carriedReward + parcel.reward - decayPenalty - agentPenalty;
+                const util = (carriedReward + parcel.reward - decayPenalty) * agentPenalty;
 
                 const o = ['go_pick_up', parcel.x, parcel.y, parcel.id, parcel.reward];
                 o._meta = { utility: util };
@@ -194,11 +196,11 @@ function optionsGeneration() {
     if (opts.length > 0) {
         myAgent.push(opts[0]);
     } else {
-        console.log('[OptionsGeneration] No valid options, falling back to smart exploration.');
+        // console.log('[OptionsGeneration] No valid options, falling back to smart exploration.');
         myAgent.push(['explore']);
     }
 
-    console.log('Option Sorted ', opts);
+    // console.log('Option Sorted ', opts);
 }
 
 
@@ -445,7 +447,8 @@ class RandomMove extends Plan {
 
         function isAgentNearby(x, y) {
             for (const agent of otherAgents.values()) {
-                const d = Math.abs(Math.round(agent.x) - x) + Math.abs(Math.round(agent.y) - y);
+                const d = distance(me, agent);
+                console.log('distance between me and the agent', d);
                 if (d <= 1) return true;
             }
             return false;
@@ -458,7 +461,7 @@ class RandomMove extends Plan {
             return visits + distToCenter * 0.1;
         }
 
-        // 1) primo tentativo sui vicini diretti
+        // primo tentativo sui vicini diretti
         const neighbors = [
             { x: me.x + 1, y: me.y },
             { x: me.x - 1, y: me.y },
@@ -474,7 +477,7 @@ class RandomMove extends Plan {
             score: scoreMove(n.x, n.y)
         }));
 
-        // solo quelli non troppo battuti
+        // solo quelli non troppo esplorati
         candidates = candidates.filter(c => c.visits < 5);
 
         if (candidates.length > 0) {
@@ -490,7 +493,7 @@ class RandomMove extends Plan {
             return true;
         }
 
-        // 2) se non ci sono vicini utili → cerca un "frontier tile" lontano e inesplorato
+        // se non ci sono vicini utili cerca un "frontier tile" lontano e inesplorato
         const allFrontiers = Array.from(map.tiles.values())
             .filter(t => !isWall(t.x, t.y)
                        && !isAgentNearby(t.x, t.y)
@@ -499,8 +502,8 @@ class RandomMove extends Plan {
         if (allFrontiers.length > 0) {
             // trovo quello che massimizza la distanza da me
             allFrontiers.sort((a, b) => {
-                const da = Math.abs(me.x - a.x) + Math.abs(me.y - a.y);
-                const db = Math.abs(me.x - b.x) + Math.abs(me.y - b.y);
+                const da = distance(me, a);
+                const db = distance(me, b);
                 return db - da;
             });
             const target = allFrontiers[0];
@@ -511,8 +514,8 @@ class RandomMove extends Plan {
             return true;
         }
 
-        // 3) se anche la frontiera è esaurita → attendo e rigenero
-        console.warn("[SmartExploreSafeZone] Mappa esplorata / bloccato. Attendo 500ms.");
+        // se anche la frontiera è esaurita attendo e rigenero
+        console.warn("[SmartExploreSafeZone] Bloccato. Attendo 500ms.");
         await new Promise(r => setTimeout(r, 500));
         optionsGeneration();
         return true;
