@@ -1,4 +1,6 @@
 import { map } from './map.js';
+import { otherAgents, me } from './sensing.js';
+import { visitedTiles } from './plan.js';
 
 export function distance({ x: x1, y: y1 }, { x: x2, y: y2 }) {
     return Math.abs(Math.round(x1) - Math.round(x2)) + Math.abs(Math.round(y1) - Math.round(y2));
@@ -22,3 +24,21 @@ export function nearestDelivery({ x, y }) {
         .filter(t => t.type === 2)
         .sort((a, b) => distance(a, { x, y }) - distance(b, { x, y }))[0];
 }
+
+// Utilities for SmartExplore
+export const center = { x: map.width / 2, y: map.height / 2 };
+
+export const isWall = (xx, yy) => {
+    const t = map.xy(xx, yy);
+    return (!t || t.type === 0);
+};
+
+export function isAgentNearby(x, y) {
+    for (const agent of otherAgents.values()) {
+        const d = distance(me, agent);
+        console.log('distance between me and the agent', d);
+        if (d <= 1) return true;
+    }
+    return false;
+}
+

@@ -1,16 +1,11 @@
 import { a_star } from './astar_search.js';
 import {map} from './map.js';
-import {me, otherAgents, parcels} from './sensing.js';
-import { distance, getDirection, nearestDelivery } from './utils.js';
+import {me, parcels} from './sensing.js';
+import { distance, getDirection, nearestDelivery, recordVisit } from './utils.js';
+import {isWall, isAgentNearby, center} from './utils.js';
 import { client } from './client.js';
 import { optionsGeneration } from './options.js';
 import { Intention } from './intentions.js';
-
-const visitedTiles = new Map();
-function recordVisit(x, y) {
-    const key = `${Math.round(x)},${Math.round(y)}`;
-    visitedTiles.set(key, (visitedTiles.get(key) || 0) + 1);
-}
 
 class Plan {
     #sub = []; #parent; #stopped = false;
@@ -136,34 +131,18 @@ class RandomMove extends Plan {
     }
   }
 
+const visitedTiles = new Map();
   class SmartExplore extends Plan {
     static isApplicableTo(a) { return a === 'explore'; }
 
     async execute() {
-        const center = { x: map.width / 2, y: map.height / 2 };
-
-        const isWall = (xx, yy) => {
-            const t = map.xy(xx, yy);
-            return (!t || t.type === 0);
-        };
-
-        function isAgentNearby(x, y) {
-            for (const agent of otherAgents.values()) {
-                const d = distance(me, agent);
-                console.log('distance between me and the agent', d);
-                if (d <= 1) return true;
-            }
-            return false;
-        }
-
+        
         function scoreMove(x, y) {
             const key = `${x},${y}`;
             const visits = visitedTiles.get(key) || 0;
             const distToCenter = Math.abs(center.x - x) + Math.abs(center.y - y);
             return visits + distToCenter * 0.1;
         }
-
-        // primo tentativo sui vicini diretti
         const neighbors = [
             { x: me.x + 1, y: me.y },
             { x: me.x - 1, y: me.y },
@@ -224,4 +203,4 @@ class RandomMove extends Plan {
     }
 }
 
-export { Plan, GoPickUp, GoDeliver, AStarMove, RandomMove, SmartExplore };
+export { Plan, GoPickUp, GoDeliver, AStarMove, RandomMove, SmartExplore, visitedTiles };

@@ -1,8 +1,3 @@
-// --- astar_search.js ---
-
-// A* pathfinding for grid-based maps
-// Pure version: NO Deliveroo API, NO client connection, NO CLI args
-
 export function a_star(start, goal, isWall) {
     const openSet = [start];
     const cameFrom = new Map();
