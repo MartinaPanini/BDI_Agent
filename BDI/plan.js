@@ -49,12 +49,26 @@ class GoDeliver extends Plan {
     static isApplicableTo(a) { return a === 'go_deliver'; }
     async execute() {
         const tile = nearestDelivery(me);
-        await this.subIntention(['go_to', tile.x, tile.y]);
+    
+        try {
+            await this.subIntention(['go_to', tile.x, tile.y]);
+        } catch (e) {
+            console.warn("[GoDeliver] Failed to reach delivery location:", e);
+            throw ['cannot_reach_delivery'];
+        }
+    
+        // Double-check that we are actually at the correct location before dropping
+        if (me.x !== tile.x || me.y !== tile.y) {
+            console.error("[GoDeliver] Not at delivery location, aborting putdown.");
+            throw ['not_at_delivery_location'];
+        }
+    
         if (isTileBlockedByAgent(tile.x, tile.y)) {
             console.warn("[GoDeliver] Agent blocking delivery tile. Waiting...");
             await new Promise(r => setTimeout(r, 500));
             throw ['blocked by agent'];
         }
+    
         const success = await client.emitPutdown();
         if (success) {
             me.carrying.clear();
@@ -63,7 +77,7 @@ class GoDeliver extends Plan {
             throw ['delivery_failed'];
         }
         return true;
-    }
+    }    
 }
 
 class AStarMove extends Plan {
