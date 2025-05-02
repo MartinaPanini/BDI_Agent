@@ -2,7 +2,7 @@ import { a_star } from './astar_search.js';
 import {map} from './map.js';
 import {me, parcels} from './sensing.js';
 import { distance, getDirection, nearestDelivery, recordVisit } from './utils.js';
-import {isWall, isAgentNearby, center} from './utils.js';
+import {isWall, isAgentNearby, isTileBlockedByAgent, center} from './utils.js';
 import { client } from './client.js';
 import { optionsGeneration } from './options.js';
 import { Intention } from './intentions.js';
@@ -25,6 +25,12 @@ class GoPickUp extends Plan {
     async execute(_, x, y, parcelId) {
 
         await this.subIntention(['go_to', x, y]);
+        // Add this inside GoPickUp before emitPickup
+        if (isTileBlockedByAgent(x, y)) {
+            console.warn("[GoPickUp] Agent blocking pickup tile. Waiting...");
+            await new Promise(r => setTimeout(r, 500));
+            throw ['blocked by agent'];
+        }
         const success = await client.emitPickup();
         if (!success) {
             console.error("[GoPickUp] Pickup failed, throwing error");
@@ -44,6 +50,11 @@ class GoDeliver extends Plan {
     async execute() {
         const tile = nearestDelivery(me);
         await this.subIntention(['go_to', tile.x, tile.y]);
+        if (isTileBlockedByAgent(tile.x, tile.y)) {
+            console.warn("[GoDeliver] Agent blocking delivery tile. Waiting...");
+            await new Promise(r => setTimeout(r, 500));
+            throw ['blocked by agent'];
+        }
         const success = await client.emitPutdown();
         if (success) {
             me.carrying.clear();
@@ -65,7 +76,9 @@ class AStarMove extends Plan {
             return (t.type === 0);
         };
 
-        let path = a_star({ x: me.x, y: me.y }, { x, y }, isWall);
+        const isBlocked = (xx, yy) => isWall(xx, yy) || isTileBlockedByAgent(xx, yy);
+        let path = a_star({ x: me.x, y: me.y }, { x, y }, isBlocked);
+        
         if (!path.length) {
             console.error(`[AStarMove] No path to goal.`);
             throw ['no path'];
@@ -148,7 +161,8 @@ const visitedTiles = new Map();
             { x: me.x - 1, y: me.y },
             { x: me.x,     y: me.y + 1 },
             { x: me.x,     y: me.y - 1 },
-        ].filter(n => !isWall(n.x, n.y) && !isAgentNearby(n.x, n.y));
+        ].filter(n => !isWall(n.x, n.y) && !isTileBlockedByAgent(n.x, n.y));
+
 
         let candidates = neighbors.map(n => ({
             x: n.x,
@@ -177,7 +191,7 @@ const visitedTiles = new Map();
         // se non ci sono vicini utili cerca un "frontier tile" lontano e inesplorato
         const allFrontiers = Array.from(map.tiles.values())
             .filter(t => !isWall(t.x, t.y)
-                       && !isAgentNearby(t.x, t.y)
+                       && !isTileBlockedByAgent(t.x, t.y)
                        && (visitedTiles.get(`${t.x},${t.y}`) || 0) === 0);
 
         if (allFrontiers.length > 0) {
