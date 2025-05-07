@@ -62,6 +62,17 @@ export const isWall = (xx, yy) => {
     return (!t || t.type === 0);
 };
 
+export function getSpawnTiles() {
+    let spawnTiles = new Map();
+    if (spawnTiles.size > 0) return spawnTiles;
+    for (const tile of map.tiles.values()) {
+        if (tile.type === 1) {
+            spawnTiles.set(`${tile.x},${tile.y}`, tile);
+        }
+    }
+    return spawnTiles;
+}
+
 export function isAgentNearby(x, y) {
     for (const agent of otherAgents.values()) {
         const d = distance(me, agent);
