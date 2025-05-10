@@ -9,7 +9,7 @@ class IntentionRevision {
         while (true) {
             if (this.intention_queue.length > 0) {
                 const intention = this.intention_queue[0];
-                console.log('[Intention loop] Pursuing:', intention.predicate);
+                //console.log('[Intention loop] Pursuing:', intention.predicate);
     
                 try {
                     await intention.achieve();
@@ -21,20 +21,20 @@ class IntentionRevision {
     
                     const failedKey = intention.predicate.join(',');
                     if (optionsWithMetadata.has(failedKey)) {
-                        console.log(`[Intention loop] Removing failed option: ${failedKey}`);
+                        //console.log(`[Intention loop] Removing failed option: ${failedKey}`);
                         optionsWithMetadata.delete(failedKey);
                     }
     
                     if (intention.predicate[0] === 'go_pick_up') {
                         const parcelId = intention.predicate[3];
                         if (parcelId) {
-                            console.warn(`[Intention loop] Blacklisting unreachable parcel: ${parcelId}`);
+                            //console.warn(`[Intention loop] Blacklisting unreachable parcel: ${parcelId}`);
                             blockedParcels.add(parcelId);
                         }
                     }
     
                     optionsGeneration();
-                    console.log('Regenerating options');
+                    //console.log('Regenerating options');
                 }
             }
             await new Promise(r => setImmediate(r));

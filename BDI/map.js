@@ -6,12 +6,13 @@ const map = {
     height: 0,
     myBeliefSet: new Beliefset(),
     tiles: new Map(),
+    spawnTiles: new Map(),
     add(tile) { this.tiles.set(tile.x + 1000 * tile.y, tile); },
     xy(x, y) { return this.tiles.get(Math.round(x) + 1000 * Math.round(y)); }
 };
 
 client.onMap((width, height, tiles, beliefset) => {
-    //console.log('Received onMap event with beliefset:', beliefset);
+    //console.log(`[Map] Received ${tiles.length} tiles`); // Debug
 
     map.width = width;
     map.height = height;
@@ -22,15 +23,26 @@ client.onMap((width, height, tiles, beliefset) => {
     } else {
         updateBeliefset(); // fall back on reconstructing it
     }
-    
+    map.spawnTiles.clear(); // if reusing the original Map
+    tiles.forEach(t => {
+        map.add(t);
+        if (t.type === 1) {
+            map.spawnTiles.set(`${t.x},${t.y}`, t);
+        }
+    });
 
-    tiles.forEach(t => map.add(t));
 });
 
 
 client.onTile((x, y, delivery) => {
-    map.add({ x, y, type: delivery ? 2 : 1 });
+    const tile = { x, y, type: delivery ? 2 : 1 };
+    map.add(tile);
+
+    if (tile.type === 1) {
+        map.spawnTiles.set(`${x},${y}`, tile);
+    }
 });
+
 
  /**
      * function to update the beliefset used in planning
@@ -61,6 +73,5 @@ client.onTile((x, y, delivery) => {
             map.myBeliefSet.declare(`down t${x}_${y} t${x}_${y - 1}`);
     }
 }
-
 
 export { map, updateBeliefset }

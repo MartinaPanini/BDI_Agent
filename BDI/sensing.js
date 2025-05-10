@@ -15,6 +15,8 @@ client.onYou(({ id, name, x, y, score }) => {
     Object.assign(me, { id, name, x, y, score });
 });
 
+const ally = { id: null, name: null, x: null, y: null, score: null, carrying: new Map() };
+
 // Parcels
 const parcels = new Map();
 const blockedParcels = new Set();
@@ -50,4 +52,4 @@ client.onAgentsSensing((agents) => {
   }
 });
 
-export { me, parcels, otherAgents, blockedParcels };
+export { me, ally, parcels, otherAgents, blockedParcels };

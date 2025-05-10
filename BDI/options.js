@@ -8,7 +8,7 @@ let AGENTS_OBSERVATION_DISTANCE;
 let PARCEL_OBSERVATION_DISTANCE;
 let MOVEMENT_DURATION;
 let PARCEL_DECADING_INTERVAL;
-const DELIVERY_ZONE_THRESHOLD = 3; // Threshold for delivery zone
+const DELIVERY_ZONE_THRESHOLD = 5; // Threshold for delivery zone
 // Config loading
 client.onConfig(config => {
     AGENTS_OBSERVATION_DISTANCE = config.AGENTS_OBSERVATION_DISTANCE;
@@ -35,16 +35,16 @@ export function optionsGeneration() {
         let deliveryPenalty = 0;
         for (const agent of otherAgents.values()) {
             const d = distance(agent, deliveryTile);
-            if (d <= 1) deliveryPenalty += 5;
-            else if (d <= 2) deliveryPenalty += 3;
-            else if (d <= 3) deliveryPenalty += 1;
+            if (d <= 1) deliveryPenalty += 0.7;
+            else if (d <= 2) deliveryPenalty += 0.8;
+            else if (d <= 3) deliveryPenalty += 0.9;
         }
 
         const util = (
             (d2d < DELIVERY_ZONE_THRESHOLD)
                 ? carriedReward
                 : carriedReward - carriedQty * MOVEMENT_DURATION / PARCEL_DECADING_INTERVAL * d2d
-        ) - deliveryPenalty;
+        ) * deliveryPenalty;
 
         const o = ['go_deliver'];
         o._meta = { utility: util };
