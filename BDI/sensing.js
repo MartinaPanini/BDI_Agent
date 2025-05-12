@@ -15,7 +15,7 @@ client.onYou(({ id, name, x, y, score }) => {
     Object.assign(me, { id, name, x, y, score });
 });
 
-const ally = { id: null, name: null, x: null, y: null, score: null, carrying: new Map() };
+const ally = { id: null, name: null, x: null, y: null, score: null, carrying: new Map(), currentAction: null, targetParcelId: null };
 
 // Parcels
 const parcels = new Map();
