@@ -1,6 +1,7 @@
 import { optionsWithMetadata, optionsGeneration } from "./options.js";
 import { blockedParcels} from "./sensing.js";
 import { planLibrary } from "./main.js";
+
 class IntentionRevision {
     #intention_queue = [];
     get intention_queue() { return this.#intention_queue; }
@@ -77,7 +78,6 @@ class IntentionRevisionReplace extends IntentionRevision {
         this.intention_queue.unshift(intent);
     }
 }
-
 
 class Intention {
     #predicate; #parent; #current_plan; #started = false; #stopped = false;
