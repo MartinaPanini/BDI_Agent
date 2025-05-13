@@ -41,7 +41,7 @@ export class PddlMove extends Plan {
             if (this.stopped) throw ['stopped'];
 
             if (me.x === x && me.y === y) {
-                console.log('Target reached');
+                //console.log('Target reached');
                 return true;
             }
 
@@ -74,7 +74,7 @@ export class PddlMove extends Plan {
                     if (success) {
                         me.carrying.set(par.id, par);
                         parcels.delete(par.id);
-                        console.log(`[PddlMove] Picked up parcel ${par.id}`);
+                        //console.log(`[PddlMove] Picked up parcel ${par.id}`);
                     }
                 }
             }

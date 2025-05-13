@@ -174,7 +174,7 @@ class ExploreSpawnTiles extends Plan {
         // Initial sort by distance to the agent's starting position
         .sort((a, b) => distance(me, a) - distance(me, b));
       this._currentIndex = 0;
-      console.log(`[ExploreSpawnTiles] Initialized with ${this._spawnQueue.length} spawn tiles.`);
+      //console.log(`[ExploreSpawnTiles] Initialized with ${this._spawnQueue.length} spawn tiles.`);
     }
 
     async execute() {

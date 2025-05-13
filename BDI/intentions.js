@@ -13,7 +13,7 @@ class IntentionRevision {
     
                 try {
                     await intention.achieve();
-                    console.log('[Intention loop] Completed intention:', intention.predicate);
+                    //console.log('[Intention loop] Completed intention:', intention.predicate);
                     this.intention_queue.shift();
                 } catch (err) {
                     console.error('[Intention loop] Failed intention:', intention.predicate, 'Error:', err);
