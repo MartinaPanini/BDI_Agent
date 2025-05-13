@@ -13,6 +13,6 @@
   "description": "",
   "dependencies": {
     "@unitn-asa/deliveroo-js-client": "^2.0.2",
-    "@unitn-asa/pddl-client": "^1.6.1"
+    "@unitn-asa/pddl-client": "^1.6.2"
   }
 }
