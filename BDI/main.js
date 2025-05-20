@@ -6,6 +6,7 @@ import {IntentionRevisionReplace} from './intentions.js'
 import { pickupCoordination } from './shared.js';
 import argsParser from 'args-parser';
 import { me, ally } from './sensing.js'; // Import me and ally
+import { multiAgent } from './index.js';
 
 client.onYou(optionsGeneration);
 client.onParcelsSensing(optionsGeneration);
@@ -31,8 +32,10 @@ client.onMsg(async (id, name, msg, reply) => {
     }
 });
 
-export const planLibrary = [AStarMove, GoPickUp, GoDeliver, ExploreSpawnTiles];
-
+let planLibrary = [];
+if (multiAgent) { planLibrary = [AStarMove, GoPickUp, GoDeliver, ExploreSpawnTiles]}
+else { planLibrary = [PddlMove, GoPickUp, GoDeliver, ExploreSpawnTiles]}
+export const PlanLibrary = planLibrary;
 // Start agent
 export const myAgent = new IntentionRevisionReplace();
 myAgent.loop();

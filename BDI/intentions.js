@@ -1,6 +1,6 @@
 import { optionsWithMetadata, optionsGeneration } from "./options.js";
 import { blockedParcels} from "./sensing.js";
-import { planLibrary } from "./main.js";
+import { PlanLibrary } from "./main.js";
 
 class IntentionRevision {
     #intention_queue = [];
@@ -89,7 +89,7 @@ class Intention {
     async achieve() {
         if (this.#started) return this;
         this.#started = true;
-        for (const PlanClass of planLibrary) {
+        for (const PlanClass of PlanLibrary) {
             if (this.stopped) throw ['stopped', ...this.predicate];
             if (PlanClass.isApplicableTo(...this.predicate)) {
                 this.#current_plan = new PlanClass(this.#parent);
