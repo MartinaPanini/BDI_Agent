@@ -1,6 +1,6 @@
 const config = {
 
-    host: 'https://deliveroojs.rtibdi.disi.unitn.it/' || 'http://localhost:8080',
+    host: 'https://deliveroojs2.rtibdi.disi.unitn.it/' || 'http://localhost:8080',
     // token fo deliveroojs.rtibdi.disi.unitn.it
     tokens: {
     'agent1': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImY3NjQ1OCIsIm5hbWUiOiJNYXN0ZXIiLCJ0ZWFtSWQiOiJiMTU4NDEiLCJ0ZWFtTmFtZSI6Ik1leGljYW5DYXJhdmFuIiwicm9sZSI6InVzZXIiLCJpYXQiOjE3NDY4ODMwODB9.PSnrwjg0UP0uUURYg2UOjM1oBJK-1aLuIf9wchQy61o',

@@ -1,5 +1,7 @@
 import {client} from "./client.js";
 import {distance} from "./utils.js";
+import { sharePerception } from "./communication.js";
+import { teamAgentId } from "./main.js";
 
 let AGENTS_OBSERVATION_DISTANCE;
 let PARCEL_OBSERVATION_DISTANCE;
@@ -27,6 +29,8 @@ client.onParcelsSensing((perceived) => {
       if (!parcels.has(p.id) && d <= AGENTS_OBSERVATION_DISTANCE) {  // Only consider parcels within range
         newParcel = true;
         parcels.set(p.id, p);
+        //console.log('[Sensing] New parcel:', p);
+        sharePerception(teamAgentId);
       }
       if (p.carriedBy === me.id) me.carrying.set(p.id, p);
   });
@@ -47,6 +51,8 @@ client.onAgentsSensing((agents) => {
         const d = distance(me, agent);  // Distance between me and the agent
         if (d <= AGENTS_OBSERVATION_DISTANCE) {
             otherAgents.set(agent.id, agent); // Add agent to perception if within range
+            //console.log('[Sensing] New agent:', agent);
+            sharePerception(teamAgentId);
         }
     }
   }

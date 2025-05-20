@@ -1,12 +1,12 @@
 // import child_process in ES module
 import { spawn } from 'child_process';
 
-const mexican = { id: '648f16', name: 'mexican',
-token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY0OGYxNiIsIm5hbWUiOiJNZXhpY2FuIiwidGVhbUlkIjoiNGNkOTRiIiwidGVhbU5hbWUiOiJNZXhpY2FuQ2FyYXZhbiIsInJvbGUiOiJ1c2VyIiwiaWF0IjoxNzQ2ODg1ODAxfQ.RqRiU7GdqLpwUafVeXOhg8uYS6gvItzOLqOKsSPvGw0'
+const mexican = { id: 'bacab7', name: 'MexicanCaravan_1',
+token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImJhY2FiNyIsIm5hbWUiOiJNZXhpY2FuQ2FyYXZhbl8xIiwidGVhbUlkIjoiMzE5MTg5IiwidGVhbU5hbWUiOiJNZXhpY2FuQ2FyYXZhbiIsInJvbGUiOiJ1c2VyIiwiaWF0IjoxNzQ3NzQ0NTY3fQ.rDBaXgmz05APYdv3Q4YrgvRSkuhOU-2_TIXxozF3He0'
 };
 
-const caravan = { id: 'df9fc5', name: 'caravan',
-token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImRmOWZjNSIsIm5hbWUiOiJDYXJhdmFuIiwidGVhbUlkIjoiZDA2NjRmIiwidGVhbU5hbWUiOiJNZXhpY2FuQ2FyYXZhbiIsInJvbGUiOiJ1c2VyIiwiaWF0IjoxNzQ2ODg1ODA1fQ.zeMfm27npEBGF9Y7T7Jh9A767EGICJQdOkh4L40R3PY'
+const caravan = { id: '19116b', name: 'MexicanCaravan_2',
+token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjE5MTE2YiIsIm5hbWUiOiJNZXhpY2FuQ2FyYXZhbl8yIiwidGVhbUlkIjoiYWQxMWEzIiwidGVhbU5hbWUiOiJNZXhpY2FuQ2FyYXZhbiIsInJvbGUiOiJ1c2VyIiwiaWF0IjoxNzQ3NzQ0NTcxfQ.PqdoYKx6jBWk8SqOtRrmPTACTrZu-hkCTWxAqI9M0wM'
 };
 
 // Start the processes
