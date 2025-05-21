@@ -9,6 +9,8 @@ let AGENTS_OBSERVATION_DISTANCE;
 let MOVEMENT_DURATION;
 let PARCEL_DECADING_INTERVAL;
 
+let lastDeliverySent = 0;
+
 client.onConfig(config => {
     AGENTS_OBSERVATION_DISTANCE = config.AGENTS_OBSERVATION_DISTANCE;
     MOVEMENT_DURATION = config.MOVEMENT_DURATION;
@@ -35,7 +37,7 @@ export function optionsGeneration() {
 
         if (teammateDel && teammateDel.x === deliveryTile.x && teammateDel.y === deliveryTile.y) {
             console.warn(`[${me.name}] Teammate is delivering to the same tile (${deliveryTile.x}, ${deliveryTile.y}) — applying utility penalty.`);
-            deliveryPenalty = 0.6; // You can tweak this value
+            deliveryPenalty = 0.3; // You can tweak this value
         }
 
         const util = (
@@ -88,18 +90,20 @@ export function optionsGeneration() {
 
     // === COMMUNICATE PICKUP INTENTIONS TO TEAMMATE ===
     if (intendedPickups.length > 0 && teamAgentId) {
-        setTimeout(() => {
-            client.emitSay(teamAgentId, {
-                type: 'pickup_intentions',
-                data: intendedPickups
-            });
-            console.log(`Sending pickup intentions to ${teamAgentId}: ${intendedPickups.join(', ')}`);
-        }, 100);
-    }
+    client.emitSay(teamAgentId, { // Send immediately
+        type: 'pickup_intentions',
+        data: intendedPickups
+    });
+    console.log(`Sending pickup intentions to ${teamAgentId}: ${intendedPickups.join(', ')}`);
+}
 
     // === SELECT BEST OPTION ===
     opts.sort((a, b) => b._meta.utility - a._meta.utility);
-    if (opts.length > 0) {
+    const forcedIntention = myAgent.peek?.();
+   if (forcedIntention && forcedIntention._meta?.urgent) {
+    console.log(`Forced urgent intention: ${forcedIntention.join(', ')}`);
+    myAgent.push(forcedIntention); // Keep or re-push it
+    } else if (opts.length > 0) {
         console.log(`Selected intention: ${opts[0].join(', ')} | Utility: ${opts[0]._meta.utility.toFixed(2)}`);
         myAgent.push(opts[0]);
     } else {

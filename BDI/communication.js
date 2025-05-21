@@ -1,5 +1,5 @@
 import { client } from './client.js';
-import { me, parcels, otherAgents } from './sensing.js';
+import { me, parcels, otherAgents, blockedParcels} from './sensing.js';
 
 export function sharePerception(teammateId) {
     const visibleParcels = [...parcels.values()].map(p => ({
@@ -22,4 +22,11 @@ export function sharePerception(teammateId) {
     };
 
     client.emitSay(teammateId, message);
+}
+
+export function sendHandoff(teammateId, dropX, dropY, parcelId) {
+  client.emitSay(teammateId, {
+    type: 'handoff_intention',
+    data: { x: dropX, y: dropY, parcelId }
+  });
 }

@@ -1,11 +1,12 @@
 import { a_star } from './astar_search.js';
 import {map} from './map.js';
-import {me, parcels} from './sensing.js';
-import { distance, getDirection, nearestDelivery, recordVisit } from './utils.js';
-import {isWall, isAgentNearby, isTileBlockedByAgent, center} from './utils.js';
+import {me, parcels, otherAgents, blockedParcels} from './sensing.js';
+import { distance, getDirection, nearestDelivery, recordVisit, isWall, isAgentNearby, isTileBlockedByAgent, center, isTileBlockedByTeammate } from './utils.js';
 import { client } from './client.js';
 import { optionsGeneration } from './options.js';
 import { Intention } from './intentions.js';
+import { teamAgentId } from './main.js';    
+import { getTeammateDelivery } from './teamOptions.js';
 
 class Plan {
     #sub = []; #parent; #stopped = false;
@@ -49,7 +50,7 @@ class GoDeliver extends Plan {
     static isApplicableTo(a) { return a === 'go_deliver'; }
     async execute() {
         const tile = nearestDelivery(me);
-
+        
         try {
             await this.subIntention(['go_to', tile.x, tile.y]);
         } catch (e) {
@@ -58,9 +59,10 @@ class GoDeliver extends Plan {
         }
 
         // Double-check that we are actually at the correct location before dropping
-        if (me.x !== tile.x || me.y !== tile.y) {
-            console.error("[GoDeliver] Not at delivery location, aborting putdown.");
-            throw ['not_at_delivery_location'];
+        if (Math.round(me.x) !== Math.round(tile.x) && Math.round(me.y) !== Math.round(tile.y)){
+            console.error("[GoDeliver] Not at delivery location, stopping intention.");
+            this.stop(); // STOP INTENTION LOOP
+            throw ['not at delivery location'];
         }
 
         if (isTileBlockedByAgent(tile.x, tile.y)) {
@@ -69,12 +71,128 @@ class GoDeliver extends Plan {
             throw ['blocked by agent'];
         }
 
+        if (isTileBlockedByTeammate(tile.x, tile.y)) {
+            console.warn("[GoDeliver] Teammate blocking delivery tile. Waiting...");
+            await new Promise(r => setTimeout(r, 500));
+            throw ['blocked by teammate'];
+        }
+
         const success = await client.emitPutdown();
         if (success) {
             me.carrying.clear();
         } else {
             console.error("[GoDeliver] Delivery failed, throwing error");
+            // Enhanced error handling:
+            const teammateDel = getTeammateDelivery(); // Ensure this function is accessible
+            if (teammateDel && teammateDel.x === tile.x && teammateDel.y === tile.y) {
+                console.warn(`[<span class="math-inline">\{me\.name\}\] Delivery failed and teammate also targeting this tile \(</span>{tile.x},${tile.y}). Waiting before re-planning.`);
+                await new Promise(r => setTimeout(r, 1500 + Math.random() * 1000)); // Wait 1.5-2.5 seconds
+            }
             throw ['delivery_failed'];
+        }
+        return true;
+    }
+}
+
+class PutDown extends Plan {
+    static isApplicableTo(a) { return a === 'put_down'; }
+    async execute() {
+        if (me.carrying.size === 0) {
+            console.warn("[PutDown] No parcels to put down.");
+            return true;
+        }
+        if (!teamAgentId) {
+            console.warn("[PutDown] Teammate ID not configured. Cannot execute handoff.");
+            throw ['teammate_id_not_configured'];
+        }
+        const teammate = otherAgents.get(teamAgentId);
+
+        if (!teammate || typeof teammate.x !== 'number' || typeof teammate.y !== 'number') {
+            console.warn(`[PutDown] Teammate (ID: ${teamAgentId}) not found in sensed agents or position unknown.`);
+            throw ['teammate_not_found_or_no_position'];
+        }
+        const potentialDropTiles = [
+            { x: teammate.x + 1, y: teammate.y },
+            { x: teammate.x - 1, y: teammate.y },
+            { x: teammate.x,     y: teammate.y + 1 },
+            { x: teammate.x,     y: teammate.y - 1 },
+        ];
+       const validDropTiles = potentialDropTiles.filter(tileCoords => {
+            const tileOnMap = map.xy(tileCoords.x, tileCoords.y);
+            // Tile must exist, be a normal walkable tile (type 1), and not be blocked by another agent.
+            return tileOnMap && tileOnMap.type === 1 &&
+                   !isTileBlockedByAgent(tileCoords.x, tileCoords.y);
+        });
+        if (validDropTiles.length === 0) {
+            console.warn(`[PutDown] No valid empty tile found adjacent to teammate ${teammate.name} at (${teammate.x}, ${teammate.y}).`);
+            throw ['no_valid_handoff_tile_near_teammate'];
+        }
+
+        validDropTiles.sort((a, b) => distance(me, a) - distance(me, b));
+        const dropTile = validDropTiles[0];
+
+        console.log(`[PutDown] Selected handoff tile (${dropTile.x}, ${dropTile.y}) near teammate ${teammate.name}.`);
+
+        // Check if the selected dropTile is blocked by the teammate
+        if (isTileBlockedByTeammate(dropTile.x, dropTile.y)) {
+            console.warn(`[PutDown] Handoff tile (${dropTile.x}, ${dropTile.y}) is currently blocked by teammate ${teamAgentId}. Requesting them to move.`);
+            client.emitSay(teamAgentId, {
+                type: 'clear_tile_for_handoff', // Teammate needs to handle this message type
+                data: { x: dropTile.x, y: dropTile.y, requesterId: me.id }
+            });
+            // Wait for a reasonable time for the teammate to react. This duration might need tuning.
+            await new Promise(r => setTimeout(r, 1500)); // e.g., 1.5 seconds
+
+            if (isTileBlockedByTeammate(dropTile.x, dropTile.y)) {
+                console.error(`[PutDown] Handoff tile (${dropTile.x}, ${dropTile.y}) still blocked by teammate ${teamAgentId} after request. Aborting putdown for this tile.`);
+                throw ['handoff_tile_blocked_by_teammate_after_request'];
+            }
+            console.log(`[PutDown] Teammate seems to have cleared tile (${dropTile.x}, ${dropTile.y}). Proceeding with move.`);
+        }
+
+        if (Math.round(me.x) !== dropTile.x || Math.round(me.y) !== dropTile.y) {
+            try {
+                console.log(`[PutDown] Moving to handoff tile (${dropTile.x}, ${dropTile.y}).`);
+                await this.subIntention(['go_to', dropTile.x, dropTile.y]);
+            } catch (e) {
+                console.warn(`[PutDown] Failed to reach handoff location (${dropTile.x}, ${dropTile.y}):`, e);
+                throw ['cannot_reach_handoff_tile', e];
+            }
+        }
+
+        if (Math.round(me.x) !== dropTile.x || Math.round(me.y) !== dropTile.y) {
+            console.error("[PutDown] Not at designated handoff location after move attempt. Aborting putdown.");
+            throw ['not_at_handoff_location_after_move'];
+        }
+
+        if (isTileBlockedByAgent(dropTile.x, dropTile.y)) {
+            console.warn(`[PutDown] Handoff tile (${dropTile.x}, ${dropTile.y}) became blocked by another agent. Waiting briefly...`);
+            await new Promise(r => setTimeout(r, 300 + Math.random() * 200));
+            if (isTileBlockedByAgent(dropTile.x, dropTile.y)) {
+                console.error(`[PutDown] Handoff tile (${dropTile.x}, ${dropTile.y}) still blocked. Aborting.`);
+                throw ['handoff_tile_still_blocked_after_wait'];
+            }
+        }
+
+        const success = await client.emitPutdown();
+        if (success) {
+            console.log(`[PutDown] Successfully put down parcels at (${me.x}, ${me.y}) for teammate ${teammate.name}.`);
+            const droppedParcelsInfo = Array.from(me.carrying.values()).map(p => ({id: p.id, reward: p.reward }));
+            client.emitSay(teamAgentId, { 
+                type: 'parcels_dropped', 
+                data: { x: me.x, y: me.y, parcels: droppedParcelsInfo } 
+            });
+            
+            console.log(`[PutDown] Notified teammate ${teamAgentId} about dropped parcels at (${me.x},${me.y}).`);
+            // Block these parcels for myself to prevent immediate re-pickup
+            droppedParcelsInfo.forEach(p => {
+                blockedParcels.add(p.id);
+            });
+            console.log(`[PutDown] Added dropped parcel IDs to local block list: ${droppedParcelsInfo.map(p => p.id).join(', ')}.`);
+            me.carrying.clear();
+        } else {
+            console.error("[PutDown] Putdown action failed at API level.");
+            throw ['putdown_api_failed'];
         }
         return true;
     }
@@ -93,9 +211,13 @@ class AStarMove extends Plan {
         const isBlocked = (xx, yy) => isWall(xx, yy) || isTileBlockedByAgent(xx, yy);
         let path = a_star({ x: me.x, y: me.y }, { x, y }, isBlocked);
 
-        if (!path.length) {
-            console.error(`[AStarMove] No path to goal.`);
-            throw ['no path'];
+        if (!path.length && isWall(x, y)) {
+                console.error(`[AStarMove] No path to goal.`);
+                throw ['blocked by wall'];
+        }
+        if (!path.length && isTileBlockedByAgent(x, y)) {
+            console.error(`[AStarMove] No path to goal, blocked by agent.`);
+            throw ['blocked by agent'];
         }
 
         for (const step of path.slice(1)) {
@@ -215,11 +337,14 @@ class ExploreSpawnTiles extends Plan {
           optionsGeneration();
 
         } catch (err) {
-          console.warn(`[ExploreSpawnTiles] Failed to reach (${tx},${ty}):`, err);
-          // If we can't reach it, let optionsGeneration try something else
-          optionsGeneration();
-          // Consider if we should retry this tile or move to the next.
-          // For continuous exploration, moving to the next seems better than getting stuck.
+            console.warn(`[ExploreSpawnTiles] Failed to reach (${tx},${ty}):`, err);
+
+            // Mark this tile as temporarily blocked or skip it in the rotation
+            this._currentIndex = (this._currentIndex + 1) % this._spawnQueue.length;
+
+            // await new Promise(r => setTimeout(r, 200)); // prevent tight retry loop
+            optionsGeneration();
+
         }
 
         // Always advance to the next spawn tile after attempting to reach the current one
@@ -308,4 +433,4 @@ class SmartExplore extends Plan {
 }
 
 
-export { Plan, GoPickUp, GoDeliver, AStarMove, RandomMove, SmartExplore, ExploreSpawnTiles, visitedTiles };
+export { Plan, GoPickUp, GoDeliver, AStarMove, RandomMove, SmartExplore, ExploreSpawnTiles, PutDown, visitedTiles };
