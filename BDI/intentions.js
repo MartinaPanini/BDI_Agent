@@ -64,18 +64,23 @@ class IntentionRevisionReplace extends IntentionRevision {
         const curU = curMeta.utility;
 
         // FORZA la sostituzione se quella attuale è 'smart_explore'
-        const shouldReplace =
-            curKey === 'smart_explore' ||
-            key !== curKey && newU > curU;
+        const shouldReplace = 
+        curKey === 'smart_explore' ||
+        (newU > curU) || 
+        (newMeta.urgent && !current._meta?.urgent);
+        if (newMeta.urgent) {
+            // Urgent intentions always go to front
+            this.intention_queue.unshift(intent);
+            } else {
+                    if (!shouldReplace) return;
 
-        if (!shouldReplace) return;
+                    current.stop();
+                    this.intention_queue.shift();
 
-        current.stop();
-        this.intention_queue.shift();
-
-        const intent = new Intention(this, predicate);
-        intent.utility = newU;
-        this.intention_queue.unshift(intent);
+                    const intent = new Intention(this, predicate);
+                    intent.utility = newU;
+                    this.intention_queue.unshift(intent);
+                }
     }
 }
 

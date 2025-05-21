@@ -1,6 +1,6 @@
 // options.js
 import { client } from './client.js';
-import { me, parcels, blockedParcels } from './sensing.js';
+import { me, parcels, blockedParcels, otherAgents } from './sensing.js';
 import { distance, nearestDelivery } from './utils.js';
 import { myAgent, teamAgentId } from './main.js';
 import { teammatePickups, getTeammateDelivery } from './teamOptions.js'; 
@@ -80,6 +80,14 @@ export function optionsGeneration() {
             const decayPenalty = (carriedQty + 1) * MOVEMENT_DURATION / PARCEL_DECADING_INTERVAL * totalDistance;
             const util = (carriedReward + parcel.reward - decayPenalty);
 
+            const teammate = otherAgents.get(teamAgentId);
+            if (teammate && typeof teammate.x === 'number') {
+                const teammateDist = distance(teammate, parcel);
+                // ID-based tiebreaker for equal distances
+                if (d > teammateDist || (d === teammateDist && me.id > teammate.id)) {
+                    return;
+                }
+            }
             const o = ['go_pick_up', parcel.x, parcel.y, parcel.id, parcel.reward];
             o._meta = { utility: util };
             optionsWithMetadata.set(o.join(','), o._meta);

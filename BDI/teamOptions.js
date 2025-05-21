@@ -33,23 +33,21 @@ client.onMsg((id, name, msg, reply) => {
             myAgent.push(['explore']); // Or a more strategic move
         }
     }
-
-    if (msg.type === 'parcels_dropped' && msg.data) {
-        const { x, y, parcels } = msg.data;
-        console.log(`[${me.name}] Teammate dropped parcels at (${x}, ${y})`);
-
-        if (Array.isArray(parcels)) {
-            // Block these parcels locally (optional, if you want to prevent redelivery)
-            parcels.forEach(p => blockedParcels.add(p.id));
-
-            // Immediately plan to pick them up
-            parcels.forEach(p => {
-                console.log(`[${me.name}] Planning to pick up dropped parcel ${p.id} at (${x}, ${y})`);
-                const intent = ['go_pick_up', x, y, p.id, p.reward];
-                intent._meta = { urgent: true };
-                myAgent.push(intent);
-            });
-        }
+    if (msg?.type === 'parcel_claimed') {
+    const parcelId = msg.data.id;
+    blockedParcels.add(parcelId);
+    teammatePickups.delete(parcelId);
+    console.log(`[${me.name}] Received claim for parcel ${parcelId}`);
+    }
+   if (msg.type === 'parcels_dropped' && msg.data.urgent) {
+    parcels.forEach(p => {
+        const intent = ['go_pick_up', x, y, p.id, p.reward];
+        intent._meta = {
+            urgent: true,
+            utility: 2000 + p.reward // Higher than any normal parcel
+        };
+        myAgent.push(intent);
+        });
     }
 
     client.onMsg((id, name, msg) => {
