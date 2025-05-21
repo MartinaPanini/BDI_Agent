@@ -25,9 +25,7 @@ export function optionsGeneration() {
     const deliveryTile = nearestDelivery(me);
     const carriedQty = me.carrying.size;
     const carriedReward = Array.from(me.carrying.values()).reduce((a, p) => a + p.reward, 0);
-
     if (!deliveryTile) return;
-
     const d2d = distance(me, deliveryTile);
 
     // === DELIVERY OPTION ===
@@ -37,7 +35,7 @@ export function optionsGeneration() {
 
         if (teammateDel && teammateDel.x === deliveryTile.x && teammateDel.y === deliveryTile.y) {
             console.warn(`[${me.name}] Teammate is delivering to the same tile (${deliveryTile.x}, ${deliveryTile.y}) — applying utility penalty.`);
-            deliveryPenalty = 0.3; // You can tweak this value
+            deliveryPenalty = 0.3; 
         }
 
         const util = (
@@ -49,7 +47,6 @@ export function optionsGeneration() {
         optionsWithMetadata.set(o.join(','), o._meta);
         opts.push(o);
 
-        // Share delivery intention
         setTimeout(() => {
             client.emitSay(teamAgentId, {
                 type: 'delivery_intention',
@@ -60,7 +57,6 @@ export function optionsGeneration() {
                     reward: carriedReward
                 }
             });
-            console.log(`Sharing delivery intention to (${deliveryTile.x}, ${deliveryTile.y})`);
         }, 100);
     }
 
@@ -83,8 +79,7 @@ export function optionsGeneration() {
             const teammate = otherAgents.get(teamAgentId);
             if (teammate && typeof teammate.x === 'number') {
                 const teammateDist = distance(teammate, parcel);
-                // ID-based tiebreaker for equal distances
-                if (d > teammateDist || (d === teammateDist && me.id > teammate.id)) {
+                if (d > teammateDist) {
                     return;
                 }
             }
@@ -98,19 +93,17 @@ export function optionsGeneration() {
 
     // === COMMUNICATE PICKUP INTENTIONS TO TEAMMATE ===
     if (intendedPickups.length > 0 && teamAgentId) {
-    client.emitSay(teamAgentId, { // Send immediately
+    client.emitSay(teamAgentId, { 
         type: 'pickup_intentions',
         data: intendedPickups
     });
-    console.log(`Sending pickup intentions to ${teamAgentId}: ${intendedPickups.join(', ')}`);
 }
 
     // === SELECT BEST OPTION ===
     opts.sort((a, b) => b._meta.utility - a._meta.utility);
     const forcedIntention = myAgent.peek?.();
    if (forcedIntention && forcedIntention._meta?.urgent) {
-    console.log(`Forced urgent intention: ${forcedIntention.join(', ')}`);
-    myAgent.push(forcedIntention); // Keep or re-push it
+    myAgent.push(forcedIntention); 
     } else if (opts.length > 0) {
         console.log(`Selected intention: ${opts[0].join(', ')} | Utility: ${opts[0]._meta.utility.toFixed(2)}`);
         myAgent.push(opts[0]);
