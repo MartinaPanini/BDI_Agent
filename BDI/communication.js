@@ -5,9 +5,12 @@ export function sharePerception(teammateId) {
     const visibleParcels = [...parcels.values()].map(p => ({
         id: p.id, x: p.x, y: p.y
     }));
+            //console.log('[Communication]', visibleParcels);
     const visibleAgents = [...otherAgents.values()].map(a => ({
         id: a.id, x: a.x, y: a.y, name: a.name
     }));
+       //console.log('[Communication]', visibleAgents);
+
     const message = {
         type: 'perception-update',
         from: me.id,

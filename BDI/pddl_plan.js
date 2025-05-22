@@ -14,7 +14,10 @@ export class PddlMove extends Plan {
     }
 
     async execute(go_to, x, y) {
+        console.log(`[PddlMove] Starting plan to (${x}, ${y})`);
+
         if (typeof me.x !== 'number' || typeof me.y !== 'number') {
+            console.error('[PddlMove] Agent position is undefined:', me);
             throw ['stopped'];
         }
 
@@ -36,10 +39,14 @@ export class PddlMove extends Plan {
 
         while (true) {
             if (this.stopped) throw ['stopped'];
+
             if (me.x === x && me.y === y) {
+                //console.log('Target reached');
                 return true;
             }
+
             if (path.length === 0) {
+                console.warn('[PddlMove] Path exhausted but target not reached — replanning...');
                 updateBeliefset();
                 const newInit = map.myBeliefSet.toPddlString() + ` (at t${me.x}_${me.y})`;
                 const newProblem = new PddlProblem(
@@ -52,6 +59,7 @@ export class PddlMove extends Plan {
                 path = this.#extractPathFromPlan(newPlan);
 
                 if (path.length === 0) {
+                    console.error('[PddlMove] Replanned path still empty — cannot proceed');
                     throw ['stopped'];
                 }
             }
@@ -66,10 +74,12 @@ export class PddlMove extends Plan {
                     if (success) {
                         me.carrying.set(par.id, par);
                         parcels.delete(par.id);
+                        //console.log(`[PddlMove] Picked up parcel ${par.id}`);
                     }
                 }
             }
 
+            // Attempt to move horizontally
             if (coordinate.x !== me.x) {
                 let direction = coordinate.x > me.x ? 'right' : 'left';
                 const result = await client.emitMove(direction);
@@ -79,6 +89,8 @@ export class PddlMove extends Plan {
                     continue;
                 }
             }
+
+            // Attempt to move vertically
             if (coordinate.y !== me.y) {
                 let direction = coordinate.y > me.y ? 'up' : 'down';
                 const result = await client.emitMove(direction);
@@ -89,12 +101,14 @@ export class PddlMove extends Plan {
                 }
             }
 
+            console.log('[PddlMove] Move blocked — retrying in 300ms');
             await new Promise(r => setTimeout(r, 300));
         }
     }
 
     #extractPathFromPlan(plan) {
         if (!Array.isArray(plan)) {
+            console.error('[PddlMove] Plan is invalid:', plan);
             throw ['stopped'];
         }
 

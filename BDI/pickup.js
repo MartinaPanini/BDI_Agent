@@ -23,8 +23,10 @@ client.onMsg( async (id, name, msg, reply) => {
         if (reply) {
             try { 
                 if ( pickupCoordination[msg.parcelId] == client.id ) {
+                    console.log("replying NO. I'm already picking up this parcel")
                     reply( false ); // no, I'm already picking up this parcel
                 } else if ( pickupCoordination[msg.parcelId] == id || ! pickupCoordination[msg.parcelId] ) {
+                    console.log("replying YES. teamMate can do the pickup");
                     pickupCoordination[msg.parcelId] = id; // parcel is assigned to the other agent
                     reply( true ); // yes, go ahead, you can pickup
                 }
@@ -42,6 +44,8 @@ client.onParcelsSensing( async (parcels) => {
         // if parcel is already assigned
         if ( pickupCoordination[parcel.id] )
             return;
+        
+        console.log("parcel", parcel);
 
         // wait for the other agent to reply
         const reply = await client.emitAsk( teamAgentId, {
@@ -52,12 +56,20 @@ client.onParcelsSensing( async (parcels) => {
         // if I am allowed to pickup and parcel is not assigned to anybody
         if ( reply ) {
             if ( ! pickupCoordination[parcel.id] ) {
+                console.log(`We agreed: I will do the pickup`, parcel.id);
                 pickupCoordination[parcel.id] = client.id; // assign parcel to me
                 currentIntention = client.emitMove( 'down' );
                 let pickup = await currentIntention;
                 currentIntention = null;
+            } else {
+                console.log(
+                    "I let the other agent pickup, but meanwhile he replied me back to pickup",
+                    "Should we coordinate again?",
+                    parcel.id
+                );
             }
         } else {
+            console.log(`We agreed: teamMate ${teamAgentId} will do the pickup`, parcel.id);
         }
 
 

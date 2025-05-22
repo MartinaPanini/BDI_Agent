@@ -34,6 +34,7 @@ export function optionsGeneration() {
         let deliveryPenalty = 1;
 
         if (teammateDel && teammateDel.x === deliveryTile.x && teammateDel.y === deliveryTile.y) {
+            console.warn(`[${me.name}] Teammate is delivering to the same tile (${deliveryTile.x}, ${deliveryTile.y}) — applying utility penalty.`);
             deliveryPenalty = 0.6; // You can tweak this value
         }
 
@@ -57,6 +58,7 @@ export function optionsGeneration() {
                     reward: carriedReward
                 }
             });
+            console.log(`Sharing delivery intention to (${deliveryTile.x}, ${deliveryTile.y})`);
         }, 100);
     }
 
@@ -91,12 +93,14 @@ export function optionsGeneration() {
                 type: 'pickup_intentions',
                 data: intendedPickups
             });
+            console.log(`Sending pickup intentions to ${teamAgentId}: ${intendedPickups.join(', ')}`);
         }, 100);
     }
 
     // === SELECT BEST OPTION ===
     opts.sort((a, b) => b._meta.utility - a._meta.utility);
     if (opts.length > 0) {
+        console.log(`Selected intention: ${opts[0].join(', ')} | Utility: ${opts[0]._meta.utility.toFixed(2)}`);
         myAgent.push(opts[0]);
     } else {
         myAgent.push(['explore']);

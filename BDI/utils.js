@@ -1,5 +1,5 @@
 import { map } from './map.js';
-import { otherAgents, me, ally } from './sensing.js';
+import { otherAgents, me } from './sensing.js';
 import { visitedTiles } from './plan.js';
 import fs from 'fs';
 
@@ -54,17 +54,6 @@ export function isTileBlockedByAgent(x, y) {
     return false;
 }
 
-/**
- * Checks if a tile is blocked by the teammate
- * @param {number} x - x coordinate
- * @param {number} y - y coordinate
- * @returns {boolean} true if the teammate is on the tile
- */
-export function isTileBlockedByTeammate(x, y) {
-    if (!ally || ally.x === null || ally.y === null) return false;
-
-    return Math.round(ally.x) === Math.round(x) && Math.round(ally.y) === Math.round(y);
-}
 
 // Utilities for SmartExplore
 export const center = { x: map.width / 2, y: map.height / 2 };
@@ -77,6 +66,7 @@ export const isWall = (xx, yy) => {
 export function isAgentNearby(x, y) {
     for (const agent of otherAgents.values()) {
         const d = distance(me, agent);
+        console.log('distance between me and the agent', d);
         if (d <= 1) return true;
     }
     return false;

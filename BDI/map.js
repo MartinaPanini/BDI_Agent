@@ -12,15 +12,18 @@ const map = {
 };
 
 client.onMap((width, height, tiles, beliefset) => {
+    //console.log(`[Map] Received ${tiles.length} tiles`); // Debug
+
     map.width = width;
     map.height = height;
 
+    // Only process beliefset if it's a valid array
     if (Array.isArray(beliefset)) {
         beliefset.forEach(b => map.myBeliefSet.declare(b));
     } else {
-        updateBeliefset(); 
+        updateBeliefset(); // fall back on reconstructing it
     }
-    map.spawnTiles.clear(); 
+    map.spawnTiles.clear(); // if reusing the original Map
     tiles.forEach(t => {
         map.add(t);
         if (t.type === 1) {
@@ -29,6 +32,7 @@ client.onMap((width, height, tiles, beliefset) => {
     });
 
 });
+
 
 client.onTile((x, y, delivery) => {
     const tile = { x, y, type: delivery ? 2 : 1 };
@@ -39,21 +43,31 @@ client.onTile((x, y, delivery) => {
     }
 });
 
+
+ /**
+     * function to update the beliefset used in planning
+     * this function use the map to find the tiles and their neighbors 
+     */
  function updateBeliefset() {
     map.myBeliefSet = new Beliefset();
 
     for (let tile of map.tiles.values()) {
         const { x, y, type } = tile;
+
         if (type === 0 || type === -1) continue;
+
         const right = map.xy(x + 1, y);
         if (right && right.type > 0)
             map.myBeliefSet.declare(`right t${x}_${y} t${x + 1}_${y}`);
+
         const left = map.xy(x - 1, y);
         if (left && left.type > 0)
             map.myBeliefSet.declare(`left t${x}_${y} t${x - 1}_${y}`);
+
         const up = map.xy(x, y + 1);
         if (up && up.type > 0)
             map.myBeliefSet.declare(`up t${x}_${y} t${x}_${y + 1}`);
+
         const down = map.xy(x, y - 1);
         if (down && down.type > 0)
             map.myBeliefSet.declare(`down t${x}_${y} t${x}_${y - 1}`);
