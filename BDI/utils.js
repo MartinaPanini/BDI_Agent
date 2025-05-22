@@ -2,7 +2,6 @@ import { map } from './map.js';
 import { otherAgents, me } from './sensing.js';
 import { visitedTiles } from './plan.js';
 import fs from 'fs';
-import { teamAgentId } from './main.js';
 
 export function positionsEqual(a, b) {
     return a.x === b.x && a.y === b.y;
@@ -55,19 +54,6 @@ export function isTileBlockedByAgent(x, y) {
     return false;
 }
 
-export function isTileBlockedByTeammate(x, y) {
-    for (const agent of otherAgents.values()) {
-        if (
-            Math.round(agent.x) === Math.round(x) &&
-            Math.round(agent.y) === Math.round(y) &&
-            agent.id === teamAgentId
-        ) {
-            console.log('✅ Tile blocked by teammate:', agent.id);
-            return true;
-        }
-    }
-    return false;
-}
 
 // Utilities for SmartExplore
 export const center = { x: map.width / 2, y: map.height / 2 };
@@ -85,4 +71,3 @@ export function isAgentNearby(x, y) {
     }
     return false;
 }
-

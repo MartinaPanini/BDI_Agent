@@ -1,6 +1,6 @@
 // options.js
 import { client } from './client.js';
-import { me, parcels, blockedParcels, otherAgents } from './sensing.js';
+import { me, parcels, blockedParcels } from './sensing.js';
 import { distance, nearestDelivery } from './utils.js';
 import { myAgent, teamAgentId } from './main.js';
 import { teammatePickups, getTeammateDelivery } from './teamOptions.js'; 
@@ -8,8 +8,6 @@ import { teammatePickups, getTeammateDelivery } from './teamOptions.js';
 let AGENTS_OBSERVATION_DISTANCE;
 let MOVEMENT_DURATION;
 let PARCEL_DECADING_INTERVAL;
-
-let lastDeliverySent = 0;
 
 client.onConfig(config => {
     AGENTS_OBSERVATION_DISTANCE = config.AGENTS_OBSERVATION_DISTANCE;
@@ -25,7 +23,9 @@ export function optionsGeneration() {
     const deliveryTile = nearestDelivery(me);
     const carriedQty = me.carrying.size;
     const carriedReward = Array.from(me.carrying.values()).reduce((a, p) => a + p.reward, 0);
+
     if (!deliveryTile) return;
+
     const d2d = distance(me, deliveryTile);
 
     // === DELIVERY OPTION ===
@@ -35,7 +35,7 @@ export function optionsGeneration() {
 
         if (teammateDel && teammateDel.x === deliveryTile.x && teammateDel.y === deliveryTile.y) {
             console.warn(`[${me.name}] Teammate is delivering to the same tile (${deliveryTile.x}, ${deliveryTile.y}) — applying utility penalty.`);
-            deliveryPenalty = 0.3; 
+            deliveryPenalty = 0.6; // You can tweak this value
         }
 
         const util = (
@@ -47,6 +47,7 @@ export function optionsGeneration() {
         optionsWithMetadata.set(o.join(','), o._meta);
         opts.push(o);
 
+        // Share delivery intention
         setTimeout(() => {
             client.emitSay(teamAgentId, {
                 type: 'delivery_intention',
@@ -57,6 +58,7 @@ export function optionsGeneration() {
                     reward: carriedReward
                 }
             });
+            console.log(`Sharing delivery intention to (${deliveryTile.x}, ${deliveryTile.y})`);
         }, 100);
     }
 
@@ -76,13 +78,6 @@ export function optionsGeneration() {
             const decayPenalty = (carriedQty + 1) * MOVEMENT_DURATION / PARCEL_DECADING_INTERVAL * totalDistance;
             const util = (carriedReward + parcel.reward - decayPenalty);
 
-            const teammate = otherAgents.get(teamAgentId);
-            if (teammate && typeof teammate.x === 'number') {
-                const teammateDist = distance(teammate, parcel);
-                if (d > teammateDist) {
-                    return;
-                }
-            }
             const o = ['go_pick_up', parcel.x, parcel.y, parcel.id, parcel.reward];
             o._meta = { utility: util };
             optionsWithMetadata.set(o.join(','), o._meta);
@@ -93,18 +88,18 @@ export function optionsGeneration() {
 
     // === COMMUNICATE PICKUP INTENTIONS TO TEAMMATE ===
     if (intendedPickups.length > 0 && teamAgentId) {
-    client.emitSay(teamAgentId, { 
-        type: 'pickup_intentions',
-        data: intendedPickups
-    });
-}
+        setTimeout(() => {
+            client.emitSay(teamAgentId, {
+                type: 'pickup_intentions',
+                data: intendedPickups
+            });
+            console.log(`Sending pickup intentions to ${teamAgentId}: ${intendedPickups.join(', ')}`);
+        }, 100);
+    }
 
     // === SELECT BEST OPTION ===
     opts.sort((a, b) => b._meta.utility - a._meta.utility);
-    const forcedIntention = myAgent.peek?.();
-   if (forcedIntention && forcedIntention._meta?.urgent) {
-    myAgent.push(forcedIntention); 
-    } else if (opts.length > 0) {
+    if (opts.length > 0) {
         console.log(`Selected intention: ${opts[0].join(', ')} | Utility: ${opts[0]._meta.utility.toFixed(2)}`);
         myAgent.push(opts[0]);
     } else {
