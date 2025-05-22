@@ -10,24 +10,32 @@ class IntentionRevision {
         while (true) {
             if (this.intention_queue.length > 0) {
                 const intention = this.intention_queue[0];
-
+                //console.log('[Intention loop] Pursuing:', intention.predicate);
+    
                 try {
                     await intention.achieve();
+                    //console.log('[Intention loop] Completed intention:', intention.predicate);
                     this.intention_queue.shift();
                 } catch (err) {
                     console.error('[Intention loop] Failed intention:', intention.predicate, 'Error:', err);
-                    this.intention_queue.shift();   
+                    this.intention_queue.shift();
+    
                     const failedKey = intention.predicate.join(',');
                     if (optionsWithMetadata.has(failedKey)) {
+                        //console.log(`[Intention loop] Removing failed option: ${failedKey}`);
                         optionsWithMetadata.delete(failedKey);
                     }
+    
                     if (intention.predicate[0] === 'go_pick_up') {
                         const parcelId = intention.predicate[3];
                         if (parcelId) {
+                            //console.warn(`[Intention loop] Blacklisting unreachable parcel: ${parcelId}`);
                             blockedParcels.add(parcelId);
                         }
-                    }    
+                    }
+    
                     optionsGeneration();
+                    //console.log('Regenerating options');
                 }
             }
             await new Promise(r => setImmediate(r));
@@ -40,8 +48,10 @@ class IntentionRevisionReplace extends IntentionRevision {
         const key = predicate.join(',');
         const newMeta = optionsWithMetadata.get(key) ?? { utility: 0 };
         const newU = newMeta.utility;
+
         const current = this.intention_queue[0];
 
+        // Se non c'è nulla in coda → accoda nuova intenzione
         if (!current) {
             const intent = new Intention(this, predicate);
             intent.utility = newU;
@@ -52,16 +62,21 @@ class IntentionRevisionReplace extends IntentionRevision {
         const curKey = current.predicate.join(',');
         const curMeta = optionsWithMetadata.get(curKey) ?? { utility: 0 };
         const curU = curMeta.utility;
+
+        // FORZA la sostituzione se quella attuale è 'smart_explore'
         const shouldReplace = 
         curKey === 'smart_explore' ||
         (newU > curU) || 
         (newMeta.urgent && !current._meta?.urgent);
         if (newMeta.urgent) {
+            // Urgent intentions always go to front
             this.intention_queue.unshift(intent);
             } else {
                     if (!shouldReplace) return;
+
                     current.stop();
                     this.intention_queue.shift();
+
                     const intent = new Intention(this, predicate);
                     intent.utility = newU;
                     this.intention_queue.unshift(intent);
