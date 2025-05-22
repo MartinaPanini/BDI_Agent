@@ -55,7 +55,7 @@ function spawnProcesses( me ) {
     // marco e083aa6f59e
     const childProcess = spawn(
         `node main \
-        host="http://localhost:8080"" \
+        host="http://localhost:8080" \
         token="${me.token}" `,
         { shell: true }
     );
