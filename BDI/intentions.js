@@ -1,6 +1,6 @@
 import { optionsWithMetadata, optionsGeneration } from "./options.js";
 import { blockedParcels} from "./sensing.js";
-import { PlanLibrary } from "./main.js";
+import { planLibrary } from "./main.js";
 
 class IntentionRevision {
     #intention_queue = [];
@@ -14,7 +14,7 @@ class IntentionRevision {
     
                 try {
                     await intention.achieve();
-                    //console.log('[Intention loop] Completed intention:', intention.predicate);
+                    console.log('[Intention loop] Completed intention:', intention.predicate);
                     this.intention_queue.shift();
                 } catch (err) {
                     console.error('[Intention loop] Failed intention:', intention.predicate, 'Error:', err);
@@ -22,7 +22,7 @@ class IntentionRevision {
     
                     const failedKey = intention.predicate.join(',');
                     if (optionsWithMetadata.has(failedKey)) {
-                        //console.log(`[Intention loop] Removing failed option: ${failedKey}`);
+                        console.log(`[Intention loop] Removing failed option: ${failedKey}`);
                         optionsWithMetadata.delete(failedKey);
                     }
     
@@ -89,7 +89,7 @@ class Intention {
     async achieve() {
         if (this.#started) return this;
         this.#started = true;
-        for (const PlanClass of PlanLibrary) {
+        for (const PlanClass of planLibrary) {
             if (this.stopped) throw ['stopped', ...this.predicate];
             if (PlanClass.isApplicableTo(...this.predicate)) {
                 this.#current_plan = new PlanClass(this.#parent);

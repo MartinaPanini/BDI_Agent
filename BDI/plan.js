@@ -179,7 +179,7 @@ class ExploreSpawnTiles extends Plan {
 
     async execute() {
       if (this._spawnQueue.length === 0) {
-        console.warn('[ExploreSpawnTiles] No spawn tiles found.');
+        //console.warn('[ExploreSpawnTiles] No spawn tiles found.');
         // If no spawn tiles, wait a bit and let optionsGeneration decide
         await new Promise(r => setTimeout(r, 500));
         optionsGeneration();
@@ -215,7 +215,7 @@ class ExploreSpawnTiles extends Plan {
           optionsGeneration();
 
         } catch (err) {
-          console.warn(`[ExploreSpawnTiles] Failed to reach (${tx},${ty}):`, err);
+          //console.warn(`[ExploreSpawnTiles] Failed to reach (${tx},${ty}):`, err);
           // If we can't reach it, let optionsGeneration try something else
           optionsGeneration();
           // Consider if we should retry this tile or move to the next.
@@ -229,7 +229,7 @@ class ExploreSpawnTiles extends Plan {
         // Small delay before the next movement attempt to avoid high CPU usage
         await new Promise(r => setTimeout(r, 100));
       }
-      console.log('[ExploreSpawnTiles] Plan stopped.');
+      //console.log('[ExploreSpawnTiles] Plan stopped.');
       return true; // Plan finished (due to being stopped externally)
     }
 }
@@ -292,7 +292,7 @@ class SmartExplore extends Plan {
                 return db - da;
             });
             const target = allFrontiers[0];
-            console.log(`[SmartExplore] No neighbor left, A* to frontier (${target.x},${target.y})`);
+            //console.log(`[SmartExplore] No neighbor left, A* to frontier (${target.x},${target.y})`);
             await this.subIntention(['go_to', target.x, target.y]);
             recordVisit(me.x, me.y);
             optionsGeneration();

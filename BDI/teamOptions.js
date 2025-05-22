@@ -9,7 +9,7 @@ client.onMsg((id, name, msg, reply) => {
     if (!msg || !msg.type) return;
 
     if (msg.type === 'pickup_intentions' && Array.isArray(msg.data)) {
-        console.log(`Received pickup intentions from ${name}: ${msg.data.join(', ')}`);
+        //console.log(`Received pickup intentions from ${name}: ${msg.data.join(', ')}`);
         teammatePickups.clear();
         msg.data.forEach(id => teammatePickups.add(id));
     }
@@ -23,7 +23,7 @@ client.onMsg((id, name, msg, reply) => {
             from: name,
             timestamp: Date.now()
         };
-        console.log(`Received delivery intention from ${name} to (${msg.data.x}, ${msg.data.y})`);
+        //console.log(`Received delivery intention from ${name} to (${msg.data.x}, ${msg.data.y})`);
     }
 });
 

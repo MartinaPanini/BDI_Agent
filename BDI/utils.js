@@ -54,7 +54,6 @@ export function isTileBlockedByAgent(x, y) {
     return false;
 }
 
-
 // Utilities for SmartExplore
 export const center = { x: map.width / 2, y: map.height / 2 };
 

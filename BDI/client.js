@@ -6,12 +6,6 @@ import config from "./config.js"; // adjust the path if needed
 const SERVER_URL = config.host;
 const TOKEN = config.token;  
 
-// Dichiarazione di variabili globali per memorizzare il ruolo e l'ID dell'alleato
-let myRole = null; // 'MASTER' o 'SLAVE'
-let allyId = null;
-
-
-
 // Make sure these are defined in the environment or before import
 export const client = new DeliverooApi(SERVER_URL, TOKEN);
 

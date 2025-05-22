@@ -1,6 +1,6 @@
 ;; domain file: new_domain.pddl
 (define (domain default)
-    (:requirements :strips :negative-preconditions)
+    (:requirements :strips)
     (:predicates
         (down ?tile1 ?tile2)
         (up ?tile1 ?tile2)
