@@ -1,5 +1,7 @@
-// import child_process in ES module
 import { spawn } from 'child_process';
+
+const host = 'http://localhost:8080';
+//const host = "https://deliveroojs2.rtibdi.disi.unitn.it/"
 
 const mexican = { id: 'bacab7', name: 'MexicanCaravan_1',
 token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImJhY2FiNyIsIm5hbWUiOiJNZXhpY2FuQ2FyYXZhbl8xIiwidGVhbUlkIjoiMzE5MTg5IiwidGVhbU5hbWUiOiJNZXhpY2FuQ2FyYXZhbiIsInJvbGUiOiJ1c2VyIiwiaWF0IjoxNzQ3NzQ0NTY3fQ.rDBaXgmz05APYdv3Q4YrgvRSkuhOU-2_TIXxozF3He0'
@@ -16,10 +18,9 @@ spawnProcesses( caravan, mexican );
 // Function to spawn child processes
 function spawnProcesses( me, teamMate ) {
     
-    // marco e083aa6f59e
     const childProcess = spawn(
         `node main \
-        host="http://localhost:8080" \
+        host="${host}" \
         token="${me.token}" \
         teamId="${teamMate.id}" `,
         { shell: true }
