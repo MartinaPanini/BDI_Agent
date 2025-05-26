@@ -1,30 +1,33 @@
 import { spawn } from 'child_process';
 
-const host = 'http://localhost:8080';
-//const host = "https://deliveroojs2.rtibdi.disi.unitn.it/"
+const host = "https://deliveroojs2.rtibdi.disi.unitn.it/";
 
-const mexican = { id: 'bacab7', name: 'MexicanCaravan_1',
-token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImJhY2FiNyIsIm5hbWUiOiJNZXhpY2FuQ2FyYXZhbl8xIiwidGVhbUlkIjoiMzE5MTg5IiwidGVhbU5hbWUiOiJNZXhpY2FuQ2FyYXZhbiIsInJvbGUiOiJ1c2VyIiwiaWF0IjoxNzQ3NzQ0NTY3fQ.rDBaXgmz05APYdv3Q4YrgvRSkuhOU-2_TIXxozF3He0'
-};
+const mexican = { id: 'bacab7', name: 'MexicanCaravan_1', token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImJhY2FiNyIsIm5hbWUiOiJNZXhpY2FuQ2FyYXZhbl8xIiwidGVhbUlkIjoiMzE5MTg5IiwidGVhbU5hbWUiOiJNZXhpY2FuQ2FyYXZhbiIsInJvbGUiOiJ1c2VyIiwiaWF0IjoxNzQ3NzQ0NTY3fQ.rDBaXgmz05APYdv3Q4YrgvRSkuhOU-2_TIXxozF3He0' };
+const caravan = { id: '19116b', name: 'MexicanCaravan_2', token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjE5MTE2YiIsIm5hbWUiOiJNZXhpY2FuQ2FyYXZhbl8yIiwidGVhbUlkIjoiYWQxMWEzIiwidGVhbU5hbWUiOiJNZXhpY2FuQ2FyYXZhbiIsInJvbGUiOiJ1c2VyIiwiaWF0IjoxNzQ3NzQ0NTcxfQ.PqdoYKx6jBWk8SqOtRrmPTACTrZu-hkCTWxAqI9M0wM' };
 
-const caravan = { id: '19116b', name: 'MexicanCaravan_2',
-token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjE5MTE2YiIsIm5hbWUiOiJNZXhpY2FuQ2FyYXZhbl8yIiwidGVhbUlkIjoiYWQxMWEzIiwidGVhbU5hbWUiOiJNZXhpY2FuQ2FyYXZhbiIsInJvbGUiOiJ1c2VyIiwiaWF0IjoxNzQ3NzQ0NTcxfQ.PqdoYKx6jBWk8SqOtRrmPTACTrZu-hkCTWxAqI9M0wM'
-};
+// === Prendi modalità da terminale ===
+const mode = process.argv[2]; // 'single' o 'multi'
 
-// Start the processes
-spawnProcesses( mexican, caravan ); 
-spawnProcesses( caravan, mexican ); 
+if (mode === 'single') {
+    console.log("▶ Avvio in modalità single-agent");
+    spawnProcesses(mexican, null);  // Nessun teammate
+} else if (mode === 'multi') {
+    console.log("▶ Avvio in modalità multi-agent");
+    spawnProcesses(mexican, caravan);
+    spawnProcesses(caravan, mexican);
+} else {
+    console.log("⚠️  Specificare 'single' o 'multi' come argomento.");
+    console.log("Esempio: node index.js multi");
+    process.exit(1);
+}
 
-// Function to spawn child processes
-function spawnProcesses( me, teamMate ) {
-    
-    const childProcess = spawn(
-        `node main \
-        host="${host}" \
-        token="${me.token}" \
-        teamId="${teamMate.id}" `,
-        { shell: true }
-    );
+function spawnProcesses(me, teammate) {
+    let cmd = `node main host="${host}" token="${me.token}"`;
+    if (teammate) {
+        cmd += ` teamId="${teammate.id}"`;
+    }
+
+    const childProcess = spawn(cmd, { shell: true });
 
     childProcess.stdout.on('data', data => {
         console.log(me.name, '>', data.toString());
@@ -37,5 +40,4 @@ function spawnProcesses( me, teamMate ) {
     childProcess.on('close', code => {
         console.log(`${me.name}: exited with code ${code}`);
     });
-
-};
+}
