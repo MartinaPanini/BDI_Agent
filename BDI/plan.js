@@ -25,15 +25,14 @@ class GoPickUp extends Plan {
     async execute(_, x, y, parcelId) {
 
         await this.subIntention(['go_to', x, y]);
-        // Add this inside GoPickUp before emitPickup
         if (isTileBlockedByAgent(x, y)) {
-            console.warn("[GoPickUp] Agent blocking pickup tile. Waiting...");
+            //console.warn("[GoPickUp] Agent blocking pickup tile. Waiting...");
             await new Promise(r => setTimeout(r, 500));
             throw ['blocked by agent'];
         }
         const success = await client.emitPickup();
         if (!success) {
-            console.error("[GoPickUp] Pickup failed, throwing error");
+            //console.error("[GoPickUp] Pickup failed, throwing error");
             throw ['pickup_failed'];
         }
         const picked = parcels.get(parcelId);
@@ -53,18 +52,18 @@ class GoDeliver extends Plan {
         try {
             await this.subIntention(['go_to', tile.x, tile.y]);
         } catch (e) {
-            console.warn("[GoDeliver] Failed to reach delivery location:", e);
+            //console.warn("[GoDeliver] Failed to reach delivery location:", e);
             throw ['cannot_reach_delivery'];
         }
 
         // Double-check that we are actually at the correct location before dropping
         if (me.x !== tile.x || me.y !== tile.y) {
-            console.error("[GoDeliver] Not at delivery location, aborting putdown.");
+            //console.error("[GoDeliver] Not at delivery location, aborting putdown.");
             throw ['not_at_delivery_location'];
         }
 
         if (isTileBlockedByAgent(tile.x, tile.y)) {
-            console.warn("[GoDeliver] Agent blocking delivery tile. Waiting...");
+            //console.warn("[GoDeliver] Agent blocking delivery tile. Waiting...");
             await new Promise(r => setTimeout(r, 500));
             throw ['blocked by agent'];
         }
@@ -73,7 +72,7 @@ class GoDeliver extends Plan {
         if (success) {
             me.carrying.clear();
         } else {
-            console.error("[GoDeliver] Delivery failed, throwing error");
+            //console.error("[GoDeliver] Delivery failed, throwing error");
             throw ['delivery_failed'];
         }
         return true;
@@ -94,14 +93,12 @@ class AStarMove extends Plan {
         let path = a_star({ x: me.x, y: me.y }, { x, y }, isBlocked);
 
         if (!path.length) {
-            console.error(`[AStarMove] No path to goal.`);
+            //console.error(`[AStarMove] No path to goal.`);
             throw ['no path'];
         }
 
         for (const step of path.slice(1)) {
             if (this.stopped) throw ['stopped'];
-            //console.log(`[AStarMove] Step to (${step.x},${step.y})`);
-
             let r;
             if (step.x > me.x) r = await client.emitMove('right');
             else if (step.x < me.x) r = await client.emitMove('left');
@@ -112,7 +109,7 @@ class AStarMove extends Plan {
                 me.x = r.x;
                 me.y = r.y;
             } else {
-                console.error('[AStarMove] Move blocked!');
+                //console.error('[AStarMove] Move blocked!');
                 throw ['move blocked'];
             }
         }
@@ -150,7 +147,6 @@ class RandomMove extends Plan {
             if (r) {
                 me.x = r.x;
                 me.y = r.y;
-                //console.log(`[RandomMove] Mi sono mosso a ${dir} in (${me.x}, ${me.y})`);
             }
 
             await new Promise(r => setTimeout(r, 100));
@@ -158,85 +154,50 @@ class RandomMove extends Plan {
     }
   }
 
-
-// Keep visitedTiles for SmartExplore if needed, but not used by ExploreSpawnTiles
 const visitedTiles = new Map();
 
 class ExploreSpawnTiles extends Plan {
-    static isApplicableTo(a) { return a === 'explore'; } // Assuming 'explore' intention can map to this plan
+    static isApplicableTo(a) { return a === 'explore'; } 
 
     constructor(parent) {
       super(parent);
-      // Build & sort once by initial distance
       this._spawnQueue = Array
         .from(map.spawnTiles.values())
         .map(t => ({ x: t.x, y: t.y }))
-        // Initial sort by distance to the agent's starting position
         .sort((a, b) => distance(me, a) - distance(me, b));
       this._currentIndex = 0;
-      //console.log(`[ExploreSpawnTiles] Initialized with ${this._spawnQueue.length} spawn tiles.`);
     }
 
     async execute() {
       if (this._spawnQueue.length === 0) {
-        //console.warn('[ExploreSpawnTiles] No spawn tiles found.');
-        // If no spawn tiles, wait a bit and let optionsGeneration decide
         await new Promise(r => setTimeout(r, 500));
         optionsGeneration();
-        return true; // Plan finished (unsuccessfully finding spawn tiles)
+        return true; 
       }
-
-      // Keep moving from spawn-tile to spawn-tile continuously
-      while (!this.stopped) { // Use !this.stopped to allow external stopping
+      while (!this.stopped) { 
         const { x: tx, y: ty } = this._spawnQueue[this._currentIndex];
-
-        //console.log(`[ExploreSpawnTiles] Targeting spawn tile (${tx},${ty}). Current index: ${this._currentIndex}`);
-
-        // Check if we are already at the target spawn tile
         if (Math.round(me.x) === tx && Math.round(me.y) === ty) {
-          //console.log(`[ExploreSpawnTiles] Already at spawn tile (${tx},${ty}).`);
-          // At the tile, let optionsGeneration check for parcels/delivery
           optionsGeneration();
-          // Move to the next spawn tile in the sequence
           this._currentIndex = (this._currentIndex + 1) % this._spawnQueue.length;
-          // Small delay to prevent tight loop if optionsGeneration doesn't move the agent immediately
           await new Promise(r => setTimeout(r, 50));
-          continue; // Continue to the next iteration of the while loop
+          continue; 
         }
-
-        // Not at the target yet, try to move there
-        //console.log(`[ExploreSpawnTiles] Moving to spawn tile (${tx},${ty}).`);
         try {
-          // Use subIntention to execute the go_to plan
           await this.subIntention(['go_to', tx, ty]);
-          //console.log(`[ExploreSpawnTiles] Reached spawn tile (${tx},${ty}).`);
-
-          // Reached the tile, let optionsGeneration check for parcels/delivery
           optionsGeneration();
 
         } catch (err) {
-          //console.warn(`[ExploreSpawnTiles] Failed to reach (${tx},${ty}):`, err);
-          // If we can't reach it, let optionsGeneration try something else
           optionsGeneration();
-          // Consider if we should retry this tile or move to the next.
-          // For continuous exploration, moving to the next seems better than getting stuck.
         }
-
-        // Always advance to the next spawn tile after attempting to reach the current one
-        // This ensures continuous cycling through spawn tiles
         this._currentIndex = (this._currentIndex + 1) % this._spawnQueue.length;
-
-        // Small delay before the next movement attempt to avoid high CPU usage
         await new Promise(r => setTimeout(r, 100));
       }
-      //console.log('[ExploreSpawnTiles] Plan stopped.');
-      return true; // Plan finished (due to being stopped externally)
+      return true; 
     }
 }
 
-
 class SmartExplore extends Plan {
-    static isApplicableTo(a) { return a === 'explore'; } // Note: Both SmartExplore and ExploreSpawnTiles use 'explore'. You might need a way to choose between them.
+    static isApplicableTo(a) { return a === 'explore'; } 
 
     async execute() {
 
@@ -262,13 +223,11 @@ class SmartExplore extends Plan {
             score: scoreMove(n.x, n.y)
         }));
 
-        // solo quelli non troppo esplorati
         candidates = candidates.filter(c => c.visits < 5);
 
         if (candidates.length > 0) {
             candidates.sort((a, b) => a.score - b.score);
             const best = candidates[0];
-            //console.log(`[SmartExplore] Stepping ${best.dir} to (${best.x},${best.y})`);
             const r = await client.emitMove(best.dir);
             if (r) {
                 me.x = r.x; me.y = r.y;
@@ -278,28 +237,23 @@ class SmartExplore extends Plan {
             return true;
         }
 
-        // se non ci sono vicini utili cerca un "frontier tile" lontano e inesplorato
         const allFrontiers = Array.from(map.tiles.values())
             .filter(t => !isWall(t.x, t.y)
                        && !isTileBlockedByAgent(t.x, t.y)
                        && (visitedTiles.get(`${t.x},${t.y}`) || 0) === 0);
 
         if (allFrontiers.length > 0) {
-            // trovo quello che massimizza la distanza da me
             allFrontiers.sort((a, b) => {
                 const da = distance(me, a);
                 const db = distance(me, b);
                 return db - da;
             });
             const target = allFrontiers[0];
-            //console.log(`[SmartExplore] No neighbor left, A* to frontier (${target.x},${target.y})`);
             await this.subIntention(['go_to', target.x, target.y]);
             recordVisit(me.x, me.y);
             optionsGeneration();
             return true;
         }
-
-        // se anche la frontiera è esaurita attendo e rigenero
         console.warn("[SmartExplore] Bloccato. Attendo 500ms.");
         await new Promise(r => setTimeout(r, 500));
         optionsGeneration();

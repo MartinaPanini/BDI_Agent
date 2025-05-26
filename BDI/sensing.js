@@ -25,11 +25,11 @@ const blockedParcels = new Set();
 client.onParcelsSensing((perceived) => {
   let newParcel = false;
   perceived.forEach(p => {
-      const d = distance(me, p); // Distance between me and the parcel
-      if (!parcels.has(p.id) && d <= AGENTS_OBSERVATION_DISTANCE) {  // Only consider parcels within range
+      const d = distance(me, p); 
+      if (!parcels.has(p.id) && d <= AGENTS_OBSERVATION_DISTANCE) {  
         newParcel = true;
         parcels.set(p.id, p);
-        //console.log('[Sensing] New parcel:', p);
+    
         sharePerception(teamAgentId);
       }
       if (p.carriedBy === me.id) me.carrying.set(p.id, p);
@@ -47,11 +47,10 @@ let otherAgents = new Map();
 client.onAgentsSensing((agents) => {
   otherAgents.clear();
   for (const agent of agents) {
-    if (agent.id !== me.id) { // Skip myself
-        const d = distance(me, agent);  // Distance between me and the agent
+    if (agent.id !== me.id) { 
+        const d = distance(me, agent);  
         if (d <= AGENTS_OBSERVATION_DISTANCE) {
-            otherAgents.set(agent.id, agent); // Add agent to perception if within range
-            //console.log('[Sensing] New agent:', agent);
+            otherAgents.set(agent.id, agent); 
             sharePerception(teamAgentId);
         }
     }

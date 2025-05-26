@@ -65,7 +65,6 @@ export const isWall = (xx, yy) => {
 export function isAgentNearby(x, y) {
     for (const agent of otherAgents.values()) {
         const d = distance(me, agent);
-        console.log('distance between me and the agent', d);
         if (d <= 1) return true;
     }
     return false;

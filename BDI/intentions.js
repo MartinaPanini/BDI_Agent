@@ -10,7 +10,6 @@ class IntentionRevision {
         while (true) {
             if (this.intention_queue.length > 0) {
                 const intention = this.intention_queue[0];
-                //console.log('[Intention loop] Pursuing:', intention.predicate);
     
                 try {
                     await intention.achieve();
@@ -25,17 +24,13 @@ class IntentionRevision {
                         console.log(`[Intention loop] Removing failed option: ${failedKey}`);
                         optionsWithMetadata.delete(failedKey);
                     }
-    
                     if (intention.predicate[0] === 'go_pick_up') {
                         const parcelId = intention.predicate[3];
                         if (parcelId) {
-                            //console.warn(`[Intention loop] Blacklisting unreachable parcel: ${parcelId}`);
                             blockedParcels.add(parcelId);
                         }
-                    }
-    
+                    }   
                     optionsGeneration();
-                    //console.log('Regenerating options');
                 }
             }
             await new Promise(r => setImmediate(r));
@@ -48,22 +43,17 @@ class IntentionRevisionReplace extends IntentionRevision {
         const key = predicate.join(',');
         const newMeta = optionsWithMetadata.get(key) ?? { utility: 0 };
         const newU = newMeta.utility;
-
         const current = this.intention_queue[0];
 
-        // Se non c'è nulla in coda → accoda nuova intenzione
         if (!current) {
             const intent = new Intention(this, predicate);
             intent.utility = newU;
             this.intention_queue.unshift(intent);
             return;
         }
-
         const curKey = current.predicate.join(',');
         const curMeta = optionsWithMetadata.get(curKey) ?? { utility: 0 };
         const curU = curMeta.utility;
-
-        // FORZA la sostituzione se quella attuale è 'smart_explore'
         const shouldReplace =
             curKey === 'smart_explore' ||
             key !== curKey && newU > curU;
