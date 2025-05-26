@@ -1,0 +1,18 @@
+{
+  "name": "bdi_agent",
+  "version": "1.0.0",
+  "main": "environment.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node --experimental-modules main.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@unitn-asa/deliveroo-js-client": "^2.0.2",
+    "@unitn-asa/pddl-client": "^1.6.2"
+  }
+}
