@@ -1,4 +1,4 @@
-import { client } from "./client.js";
+import { client } from "../deliveroo/client.js";
 import { Beliefset } from "@unitn-asa/pddl-client";
 
 const map = {

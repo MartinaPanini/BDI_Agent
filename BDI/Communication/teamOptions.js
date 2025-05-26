@@ -1,5 +1,5 @@
-import { client } from './client.js';
-import { me } from './sensing.js';
+import { client } from '../deliveroo/client.js';
+import { me } from '../Beliefs/sensing.js';
 
 const teammatePickups = new Set();
 let teammateDelivery = null;

@@ -1,11 +1,11 @@
 import { onlineSolver, PddlProblem } from "@unitn-asa/pddl-client";
-import { readFile, positionsEqual } from "./utils.js";
-import { Plan } from './plan.js';
-import { me, parcels } from './sensing.js';
-import { updateBeliefset, map } from "./map.js";
-import { client } from "./client.js";
+import { readFile, positionsEqual } from "../../utils.js";
+import { Plan } from '../plan.js';
+import { me, parcels } from '../../Beliefs/sensing.js';
+import { updateBeliefset, map } from "../../Beliefs/map.js";
+import { client } from "../../deliveroo/client.js";
 
-let domain = await readFile("./domain.pddl");
+let domain = await readFile("./Plan/PDDL/domain.pddl");
 
 export class PddlMove extends Plan {
 

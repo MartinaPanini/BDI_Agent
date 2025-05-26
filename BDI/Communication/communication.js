@@ -1,5 +1,5 @@
-import { client } from './client.js';
-import { me, parcels, otherAgents } from './sensing.js';
+import { client } from '../deliveroo/client.js';
+import { me, parcels, otherAgents } from '../Beliefs/sensing.js';
 
 export function sharePerception(teammateId) {
     const visibleParcels = [...parcels.values()].map(p => ({

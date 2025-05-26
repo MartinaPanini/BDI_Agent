@@ -1,11 +1,11 @@
-import {optionsGeneration} from './options.js';
-import { client} from './client.js';
-import {AStarMove, GoPickUp, GoDeliver, SmartExplore, ExploreSpawnTiles} from './plan.js'
-import { PddlMove} from './pddl_plan.js';
-import {IntentionRevisionReplace} from './intentions.js'
-import { pickupCoordination } from './shared.js';
+import {optionsGeneration} from './Intentions/options.js';
+import { client} from './deliveroo/client.js';
+import {AStarMove, GoPickUp, GoDeliver, SmartExplore, ExploreSpawnTiles} from './Plan/plan.js'
+import { PddlMove} from './Plan/PDDL/pddl_plan.js';
+import {IntentionRevisionReplace} from './Intentions/intentions.js'
+import { pickupCoordination } from './Communication/shared.js';
 import argsParser from 'args-parser';
-import { me, ally } from './sensing.js'; // Import me and ally
+import { me, ally } from './Beliefs/sensing.js'; // Import me and ally
 
 client.onYou(optionsGeneration);
 client.onParcelsSensing(optionsGeneration);

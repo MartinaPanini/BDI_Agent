@@ -1,7 +1,7 @@
-import {client} from "./client.js";
-import {distance} from "./utils.js";
-import { sharePerception } from "./communication.js";
-import { teamAgentId } from "./main.js";
+import {client} from "../deliveroo/client.js";
+import {distance} from "../utils.js";
+import { sharePerception } from "../Communication/communication.js";
+import { teamAgentId } from "../main.js";
 
 let AGENTS_OBSERVATION_DISTANCE;
 let PARCEL_OBSERVATION_DISTANCE;

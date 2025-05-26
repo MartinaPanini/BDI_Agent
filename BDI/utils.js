@@ -1,6 +1,6 @@
-import { map } from './map.js';
-import { otherAgents, me } from './sensing.js';
-import { visitedTiles } from './plan.js';
+import { map } from './Beliefs/map.js';
+import { otherAgents, me } from './Beliefs/sensing.js';
+import { visitedTiles } from './Plan/plan.js';
 import fs from 'fs';
 
 export function positionsEqual(a, b) {

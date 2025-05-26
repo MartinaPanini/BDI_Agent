@@ -1,6 +1,6 @@
 import { optionsWithMetadata, optionsGeneration } from "./options.js";
-import { blockedParcels} from "./sensing.js";
-import { planLibrary } from "./main.js";
+import { blockedParcels} from "../Beliefs/sensing.js";
+import { planLibrary } from "../main.js";
 
 class IntentionRevision {
     #intention_queue = [];

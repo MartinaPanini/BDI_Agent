@@ -1,9 +1,9 @@
 // options.js
-import { client } from './client.js';
-import { me, parcels, blockedParcels } from './sensing.js';
-import { distance, nearestDelivery } from './utils.js';
-import { myAgent, teamAgentId } from './main.js';
-import { teammatePickups, getTeammateDelivery } from './teamOptions.js'; 
+import { client } from '../deliveroo/client.js';
+import { me, parcels, blockedParcels } from '../Beliefs/sensing.js';
+import { distance, nearestDelivery } from '../utils.js';
+import { myAgent, teamAgentId } from '../main.js';
+import { teammatePickups, getTeammateDelivery } from '../Communication/teamOptions.js'; 
 
 let AGENTS_OBSERVATION_DISTANCE;
 let MOVEMENT_DURATION;

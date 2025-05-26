@@ -1,11 +1,11 @@
 import { a_star } from './astar_search.js';
-import {map} from './map.js';
-import {me, parcels} from './sensing.js';
-import { distance, getDirection, nearestDelivery, recordVisit } from './utils.js';
-import {isWall, isAgentNearby, isTileBlockedByAgent, center} from './utils.js';
-import { client } from './client.js';
-import { optionsGeneration } from './options.js';
-import { Intention } from './intentions.js';
+import {map} from '../Beliefs/map.js';
+import {me, parcels} from '../Beliefs/sensing.js';
+import { distance, getDirection, nearestDelivery, recordVisit } from '../utils.js';
+import {isWall, isAgentNearby, isTileBlockedByAgent, center} from '../utils.js';
+import { client } from '../deliveroo/client.js';
+import { optionsGeneration } from '../Intentions/options.js';
+import { Intention } from '../Intentions/intentions.js';
 
 class Plan {
     #sub = []; #parent; #stopped = false;

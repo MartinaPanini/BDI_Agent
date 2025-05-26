@@ -1,5 +1,4 @@
 import { DeliverooApi } from "@unitn-asa/deliveroo-js-client";
-import * as pddlClient from "@unitn-asa/pddl-client";
 
 import config from "./config.js"; // adjust the path if needed
 
