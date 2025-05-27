@@ -1,7 +1,7 @@
 import { spawn } from 'child_process';
 
-const host = "https://deliveroojs2.rtibdi.disi.unitn.it/";
-
+//const host = "https://deliveroojs2.rtibdi.disi.unitn.it/";
+const host= "http://localhost:8080/"
 const mexican = { id: 'bacab7', name: 'MexicanCaravan_1', token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImJhY2FiNyIsIm5hbWUiOiJNZXhpY2FuQ2FyYXZhbl8xIiwidGVhbUlkIjoiMzE5MTg5IiwidGVhbU5hbWUiOiJNZXhpY2FuQ2FyYXZhbiIsInJvbGUiOiJ1c2VyIiwiaWF0IjoxNzQ3NzQ0NTY3fQ.rDBaXgmz05APYdv3Q4YrgvRSkuhOU-2_TIXxozF3He0' };
 const caravan = { id: '19116b', name: 'MexicanCaravan_2', token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjE5MTE2YiIsIm5hbWUiOiJNZXhpY2FuQ2FyYXZhbl8yIiwidGVhbUlkIjoiYWQxMWEzIiwidGVhbU5hbWUiOiJNZXhpY2FuQ2FyYXZhbiIsInJvbGUiOiJ1c2VyIiwiaWF0IjoxNzQ3NzQ0NTcxfQ.PqdoYKx6jBWk8SqOtRrmPTACTrZu-hkCTWxAqI9M0wM' };
 
