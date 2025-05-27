@@ -21,7 +21,7 @@ class IntentionRevision {
     
                     const failedKey = intention.predicate.join(',');
                     if (optionsWithMetadata.has(failedKey)) {
-                        console.log(`[Intention loop] Removing failed option: ${failedKey}`);
+                        //console.log(`[Intention loop] Removing failed option: ${failedKey}`);
                         optionsWithMetadata.delete(failedKey);
                     }
                     if (intention.predicate[0] === 'go_pick_up') {

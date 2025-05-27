@@ -1,9 +1,9 @@
 import { spawn } from 'child_process';
 
-//const host = "https://deliveroojs2.rtibdi.disi.unitn.it/";
-const host= "http://localhost:8080/"
-const mexican = { id: 'bacab7', name: 'MexicanCaravan_1', token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImJhY2FiNyIsIm5hbWUiOiJNZXhpY2FuQ2FyYXZhbl8xIiwidGVhbUlkIjoiMzE5MTg5IiwidGVhbU5hbWUiOiJNZXhpY2FuQ2FyYXZhbiIsInJvbGUiOiJ1c2VyIiwiaWF0IjoxNzQ3NzQ0NTY3fQ.rDBaXgmz05APYdv3Q4YrgvRSkuhOU-2_TIXxozF3He0' };
-const caravan = { id: '19116b', name: 'MexicanCaravan_2', token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjE5MTE2YiIsIm5hbWUiOiJNZXhpY2FuQ2FyYXZhbl8yIiwidGVhbUlkIjoiYWQxMWEzIiwidGVhbU5hbWUiOiJNZXhpY2FuQ2FyYXZhbiIsInJvbGUiOiJ1c2VyIiwiaWF0IjoxNzQ3NzQ0NTcxfQ.PqdoYKx6jBWk8SqOtRrmPTACTrZu-hkCTWxAqI9M0wM' };
+const host = "https://deliveroojs2.rtibdi.disi.unitn.it/";
+//const host= "http://localhost:8080/"
+const mexican = { id: 'a5b505', name: 'MC_1', token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImE1YjUwNSIsIm5hbWUiOiJNQ18xIiwidGVhbUlkIjoiMDE3YjFiIiwidGVhbU5hbWUiOiJNZXhpY2FuQ2FyYXZhbiIsInJvbGUiOiJ1c2VyIiwiaWF0IjoxNzQ4MzQxNDU4fQ.BUltsYdCEaxEEhqj1VljF3iDHE21PAN7H-dZkYVzKK8' };
+const caravan = { id: '9aa1d3', name: 'MC_2', token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjlhYTFkMyIsIm5hbWUiOiJNQ18yIiwidGVhbUlkIjoiZTM4YjY0IiwidGVhbU5hbWUiOiJNZXhpY2FuQ2FyYXZhbiIsInJvbGUiOiJ1c2VyIiwiaWF0IjoxNzQ4MzQxNDYxfQ.JhUNNsbLuGcs81C4a3mbRVh6EOJ5HTahKj9__KQiv1I' };
 
 const mode = process.argv[2]; // 'single' o 'multi'
 

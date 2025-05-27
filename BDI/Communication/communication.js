@@ -19,5 +19,5 @@ export function sharePerception(teammateId) {
         agents: visibleAgents
     };
 
-    client.emitSay(teammateId, message);
+    //client.emitSay(teammateId, message);
 }
