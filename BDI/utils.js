@@ -1,6 +1,8 @@
 import { map } from './Beliefs/map.js';
 import { otherAgents, me } from './Beliefs/sensing.js';
 import { visitedTiles } from './Plan/plan.js';
+import { client } from './deliveroo/client.js';
+import { teamAgentId } from "./main.js"  
 import fs from 'fs';
 
 export function positionsEqual(a, b) {
@@ -52,6 +54,69 @@ export function isTileBlockedByAgent(x, y) {
         }
     }
     return false;
+}
+
+export function getDistanceToClosestSpawn() {
+    let minDist = Infinity;
+    for (const tile of map.spawnTiles.values()) {
+        const dx = tile.x - me.x;
+        const dy = tile.y - me.y;
+        const dist = Math.abs(dx) + Math.abs(dy);
+        if (dist < minDist) minDist = dist;
+    }
+    return minDist;
+}
+
+export async function assignRoles() {
+    if (!teamAgentId) return; 
+    if (map.MAP_NAME !== '25c2_hallway') return;
+    await waitUntilReady(map, client);
+
+    const myDist = distanceToClosestSpawn();
+    let received = false;
+
+    return new Promise((resolve) => {
+        const message = {
+            type: 'role-check',
+            from: me.id,
+            dist: myDist
+        };
+        client.emitSay(teamAgentId, message);
+
+        client.onMsg(async (id, name, msg) => {
+            if (msg.type === 'role-check' && !received) {
+                received = true;
+
+                const otherDist = msg.dist;
+                const myId = me.id;
+
+                const role = myDist < otherDist ? 'picker'
+                          : myDist > otherDist ? 'deliver'
+                          : myId < id ? 'picker' : 'deliver'; // tie-breaker
+
+                me.role = role;
+                console.log(`🎭 Role assigned: ${me.role}`);
+                resolve(); 
+            }
+        });
+    });
+}
+
+function distanceToClosestSpawn() {
+    let minDist = Infinity;
+    for (const tile of map.spawnTiles.values()) {
+        const dx = tile.x - me.x;
+        const dy = tile.y - me.y;
+        const dist = Math.abs(dx) + Math.abs(dy);
+        if (dist < minDist) minDist = dist;
+    }
+    return minDist;
+}
+
+async function waitUntilReady() {
+    while (map.spawnTiles.size === 0) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+    }
 }
 
 // Utilities for SmartExplore

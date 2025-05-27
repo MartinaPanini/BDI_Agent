@@ -158,7 +158,6 @@ const visitedTiles = new Map();
 
 class ExploreSpawnTiles extends Plan {
     static isApplicableTo(a) { return a === 'explore'; } 
-
     constructor(parent) {
       super(parent);
       this._spawnQueue = Array

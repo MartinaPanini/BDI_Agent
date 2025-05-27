@@ -3,36 +3,34 @@ import { client} from './deliveroo/client.js';
 import {AStarMove, GoPickUp, GoDeliver, SmartExplore, ExploreSpawnTiles} from './Plan/plan.js'
 import { PddlMove} from './Plan/PDDL/pddl_plan.js';
 import {IntentionRevisionReplace} from './Intentions/intentions.js'
-import { pickupCoordination } from './Communication/shared.js';
 import argsParser from 'args-parser';
-import { me, ally } from './Beliefs/sensing.js'; // Import me and ally
+import { assignRoles } from "./utils.js";
+import { me } from "../BDI/Beliefs/sensing.js";
+import { pickerBehavior } from './Communication/hallway/picker.js';
+ 
+const args = argsParser(process.argv);
+export const teamAgentId = args.teamId;
+
+function waitForYou() {
+    return new Promise(resolve => {
+        client.onYou(() => {
+            resolve();            // segnala che "me" è pronto
+        });
+    });
+}
+
+await waitForYou();      
+await assignRoles();        
 
 client.onYou(optionsGeneration);
 client.onParcelsSensing(optionsGeneration);
 client.onAgentsSensing(optionsGeneration);
 
-const args = argsParser(process.argv);
-export const teamAgentId = args.teamId;
-
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
-// Ricezione messaggi per la coordinazione del pickup
-client.onMsg(async (id, name, msg, reply) => {
-    if (msg?.action === 'pickup') {
-        await sleep(Math.random() * 50);
-        if (reply) {
-            if (pickupCoordination[msg.parcelId] === client.id) {
-                reply(false); // io sto già andando
-            } else {
-                pickupCoordination[msg.parcelId] = id;
-                reply(true); // vai pure tu
-            }
-        }
-    }
-});
-
-export const planLibrary = [AStarMove, GoPickUp, GoDeliver, ExploreSpawnTiles];
-
-// Start agent
+export const planLibrary = [PddlMove, GoPickUp, GoDeliver, ExploreSpawnTiles];
 export const myAgent = new IntentionRevisionReplace();
-myAgent.loop();
+
+if (me.role === 'picker'){
+    pickerBehavior();
+}else if (me.role === 'deliver'){
+
+}else{myAgent.loop();}

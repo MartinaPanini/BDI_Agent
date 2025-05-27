@@ -1,9 +1,11 @@
 import { client } from "../deliveroo/client.js";
 import { Beliefset } from "@unitn-asa/pddl-client";
+import { assignRoles } from "../utils.js";
 
 const map = {
     width: 0,
     height: 0,
+    MAP_NAME: null,
     myBeliefSet: new Beliefset(),
     tiles: new Map(),
     spawnTiles: new Map(),
@@ -11,6 +13,9 @@ const map = {
     xy(x, y) { return this.tiles.get(Math.round(x) + 1000 * Math.round(y)); }
 };
 
+client.onConfig(config => {
+    map.MAP_NAME = config.MAP_FILE; 
+});
 client.onMap((width, height, tiles, beliefset) => {
     map.width = width;
     map.height = height;
@@ -27,9 +32,7 @@ client.onMap((width, height, tiles, beliefset) => {
             map.spawnTiles.set(`${t.x},${t.y}`, t);
         }
     });
-
 });
-
 client.onTile((x, y, delivery) => {
     const tile = { x, y, type: delivery ? 2 : 1 };
     map.add(tile);
@@ -39,7 +42,7 @@ client.onTile((x, y, delivery) => {
     }
 });
 
- function updateBeliefset() {
+function updateBeliefset() {
     map.myBeliefSet = new Beliefset();
 
     for (let tile of map.tiles.values()) {

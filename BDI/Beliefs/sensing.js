@@ -12,12 +12,12 @@ client.onConfig(config => {
 });
 
 // Me state
-const me = { id: null, name: null, x: null, y: null, score: null, carrying: new Map() };
+const me = { id: null, name: null, x: null, y: null, score: null, carrying: new Map(), role:null };
 client.onYou(({ id, name, x, y, score }) => {
     Object.assign(me, { id, name, x, y, score });
 });
 
-const ally = { id: null, name: null, x: null, y: null, score: null, carrying: new Map(), currentAction: null, targetParcelId: null };
+const ally = { id: null, name: null, x: null, y: null, score: null, carrying: new Map(), currentAction: null, targetParcelId: null, role: null };
 
 // Parcels
 const parcels = new Map();
