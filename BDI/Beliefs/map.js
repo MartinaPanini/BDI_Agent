@@ -2,6 +2,7 @@ import { client } from "../deliveroo/client.js";
 import { Beliefset } from "@unitn-asa/pddl-client";
 import { assignRoles } from "../utils.js";
 
+// Map object representing the environment
 const map = {
     width: 0,
     height: 0,
@@ -12,10 +13,11 @@ const map = {
     add(tile) { this.tiles.set(tile.x + 1000 * tile.y, tile); },
     xy(x, y) { return this.tiles.get(Math.round(x) + 1000 * Math.round(y)); }
 };
-
+// Update map name when configuration is received
 client.onConfig(config => {
     map.MAP_NAME = config.MAP_FILE; 
 });
+// Update map dimensions, tiles, and belief set when full map data is received
 client.onMap((width, height, tiles, beliefset) => {
     map.width = width;
     map.height = height;
@@ -33,6 +35,7 @@ client.onMap((width, height, tiles, beliefset) => {
         }
     });
 });
+// Update a single tile and belief state when a tile changes
 client.onTile((x, y, delivery) => {
     const tile = { x, y, type: delivery ? 2 : 1 };
     map.add(tile);
@@ -41,7 +44,7 @@ client.onTile((x, y, delivery) => {
         map.spawnTiles.set(`${x},${y}`, tile);
     }
 });
-
+// Reconstructs the belief set based on current map tiles
 function updateBeliefset() {
     map.myBeliefSet = new Beliefset();
 

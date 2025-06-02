@@ -9,14 +9,19 @@ let AGENTS_OBSERVATION_DISTANCE;
 let MOVEMENT_DURATION;
 let PARCEL_DECADING_INTERVAL;
 
-client.onConfig(config => {
+client.onConfig(config => { // Listen to config updates from the client and assign parameters
     AGENTS_OBSERVATION_DISTANCE = config.AGENTS_OBSERVATION_DISTANCE;
     MOVEMENT_DURATION = config.MOVEMENT_DURATION;
     PARCEL_DECADING_INTERVAL = config.PARCEL_DECADING_INTERVAL === '1s' ? 1000 : 1000000;
 });
 
-const optionsWithMetadata = new Map();
+const optionsWithMetadata = new Map(); // Map storing available options keyed by their stringified predicates and their metadata (utility etc.)
 
+/**
+ * Generates and updates the current set of possible agent options.
+ * It evaluates delivery and pickup options based on utility and environmental factors,
+ * communicates intentions to teammates, and pushes the best option to the agent's intention queue.
+ */
 export function optionsGeneration() {
     optionsWithMetadata.clear();
     const opts = [];
@@ -84,7 +89,7 @@ export function optionsGeneration() {
         }
     });
 
-    // === COMMUNICATE PICKUP INTENTIONS TO TEAMMATE ===
+    // Share pick_ip intentions
     if (intendedPickups.length > 0 && teamAgentId) {
         setTimeout(() => {
             client.emitSay(teamAgentId, {
@@ -99,7 +104,7 @@ export function optionsGeneration() {
     if (opts.length > 0) {
         myAgent.push(opts[0]);
     } else {
-        myAgent.push(['explore']);
+        myAgent.push(['explore']); // Fallback to exploration if no options available
     }
 }
 

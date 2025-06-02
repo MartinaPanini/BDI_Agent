@@ -2,10 +2,15 @@ import { optionsWithMetadata, optionsGeneration } from "./options.js";
 import { blockedParcels} from "../Beliefs/sensing.js";
 import { planLibrary } from "../main.js";
 
+// Base class that manages a queue of intentions.
 class IntentionRevision {
     #intention_queue = [];
     get intention_queue() { return this.#intention_queue; }
 
+    /**
+     * Main loop continuously processing intentions.
+     * Waits for intention achievement or failure before moving on.
+     */
     async loop() {
         while (true) {
             if (this.intention_queue.length > 0) {
@@ -16,7 +21,7 @@ class IntentionRevision {
                     console.log('[Intention loop] Completed intention:', intention.predicate);
                     this.intention_queue.shift();
                 } catch (err) {
-                    console.error('[Intention loop] Failed intention:', intention.predicate, 'Error:', err);
+                    //console.error('[Intention loop] Failed intention:', intention.predicate, 'Error:', err);
                     this.intention_queue.shift();
     
                     const failedKey = intention.predicate.join(',');
@@ -38,6 +43,10 @@ class IntentionRevision {
     } 
 }
 
+/**
+ * Derived class that extends IntentionRevision.
+ * It adds logic to replace the current intention if a new one with higher utility arrives.
+ */
 class IntentionRevisionReplace extends IntentionRevision {
     async push(predicate) {
         const key = predicate.join(',');
@@ -69,6 +78,10 @@ class IntentionRevisionReplace extends IntentionRevision {
     }
 }
 
+/**
+ * Represents a single intention with a predicate to achieve.
+ * Attempts to execute the intention using applicable plans from the plan library.
+ */
 class Intention {
     #predicate; #parent; #current_plan; #started = false; #stopped = false;
     constructor(parent, predicate) { this.#parent = parent; this.#predicate = predicate; }
@@ -76,6 +89,12 @@ class Intention {
     get stopped() { return this.#stopped; }
     stop() { this.#stopped = true; if (this.#current_plan) this.#current_plan.stop(); }
 
+     /**
+     * Attempts to achieve the intention by executing an applicable plan.
+     * 
+     * Iterates over all plans in the plan library and picks the first applicable one.
+     * Throws error if no plan matches or if stopped before completion.
+     */
     async achieve() {
         if (this.#started) return this;
         this.#started = true;

@@ -25,11 +25,10 @@ client.onYou(optionsGeneration);
 client.onParcelsSensing(optionsGeneration);
 client.onAgentsSensing(optionsGeneration);
 
-export const planLibrary = [AStarMove, GoPickUp, GoDeliver, ExploreSpawnTiles];
+// Define the plan library based on whether we are in single-agent mode
+export const planLibrary = teamAgentId === undefined || teamAgentId === null
+    ? [PddlMove, GoPickUp, GoDeliver, ExploreSpawnTiles]
+    : [AStarMove, GoPickUp, GoDeliver, ExploreSpawnTiles];
 export const myAgent = new IntentionRevisionReplace();
 
-if (me.role === 'picker'){
-   
-}else if (me.role === 'deliver'){
-
-}else{myAgent.loop();}
+myAgent.loop();

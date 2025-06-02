@@ -5,14 +5,36 @@ import { me, parcels } from '../../Beliefs/sensing.js';
 import { updateBeliefset, map } from "../../Beliefs/map.js";
 import { client } from "../../deliveroo/client.js";
 
-let domain = await readFile("./Plan/PDDL/domain.pddl");
+let domain = await readFile("./Plan/PDDL/domain.pddl"); // Load the PDDL domain definition file asynchronously
 
+/**
+ * PddlMove class extends Plan and represents a movement plan using PDDL planning.
+ * It moves the agent from its current position to a target coordinate (x, y)
+ * by generating and executing a sequence of moves derived from an online PDDL solver.
+ */
 export class PddlMove extends Plan {
 
+    /**
+     * Static method to check if this plan is applicable.
+     * @param {string} go_to - The action predicate
+     * @param {number} x - Target x coordinate
+     * @param {number} y - Target y coordinate
+     * @returns {boolean} True if the predicate is 'go_to', meaning this plan applies.
+     */
     static isApplicableTo(go_to, x, y) {
         return go_to === 'go_to';
     }
 
+    /**
+     * Executes the movement plan towards target (x, y).
+     * Uses PDDL online solver to plan the path, then moves step-by-step.
+     * Also attempts to pick up any parcel on the current tile if not already carried.
+     * If path is exhausted before reaching target, replans dynamically.
+     * @param {string} go_to - The action predicate (should be 'go_to')
+     * @param {number} x - Target x coordinate
+     * @param {number} y - Target y coordinate
+     * @returns {Promise<boolean>} Resolves true if target reached successfully.
+     */
     async execute(go_to, x, y) {
         console.log(`[PddlMove] Starting plan to (${x}, ${y})`);
         if (typeof me.x !== 'number' || typeof me.y !== 'number') {
@@ -92,6 +114,12 @@ export class PddlMove extends Plan {
         }
     }
 
+     /**
+     * Private helper to extract a list of coordinates from a PDDL plan.
+     * Parses each action to extract target tile positions.
+     * @param {Array} plan - Array of actions returned by the PDDL solver
+     * @returns {Array} List of coordinate objects with x and y properties
+     */
     #extractPathFromPlan(plan) {
         if (!Array.isArray(plan)) {
             console.error('[PddlMove] Plan is invalid:', plan);

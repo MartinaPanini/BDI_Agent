@@ -7,11 +7,19 @@ import { client } from '../deliveroo/client.js';
 import { optionsGeneration } from '../Intentions/options.js';
 import { Intention } from '../Intentions/intentions.js';
 
+/**
+ * Core plan structure with support for nested intentions and stoppable execution.
+ */
 class Plan {
     #sub = []; #parent; #stopped = false;
     constructor(parent) { this.#parent = parent; }
     get stopped() { return this.#stopped; }
     stop() { this.#stopped = true; this.#sub.forEach(s => s.stop()); }
+     /**
+     * Creates a sub-intention and delegates execution to it.
+     * @param {Array} pred - The goal predicate.
+     * @returns {Promise<any>}
+     */
     async subIntention(pred) {
         const i = new Intention(this, pred);
         this.#sub.push(i);
@@ -19,9 +27,18 @@ class Plan {
     }
 }
 
-// Plans
+/**
+ * Plan to move to a parcel and pick it up.
+ */
 class GoPickUp extends Plan {
     static isApplicableTo(a) { return a === 'go_pick_up'; }
+    /**
+     * Moves to the target tile and picks up the parcel.
+     * @param {string} _ - Placeholder.
+     * @param {number} x - X coordinate.
+     * @param {number} y - Y coordinate.
+     * @param {string} parcelId - ID of the parcel to pick up.
+     */
     async execute(_, x, y, parcelId) {
 
         await this.subIntention(['go_to', x, y]);
@@ -44,8 +61,15 @@ class GoPickUp extends Plan {
     }
 }
 
+/**
+ * Plan to deliver a parcel to the nearest delivery tile.
+ */
 class GoDeliver extends Plan {
     static isApplicableTo(a) { return a === 'go_deliver'; }
+
+    /**
+     * Finds the nearest delivery tile and delivers the parcel.
+     */
     async execute() {
         const tile = nearestDelivery(me);
 
@@ -79,9 +103,17 @@ class GoDeliver extends Plan {
     }
 }
 
+/**
+ * Plan that uses A* to move to a specific tile.
+ */
 class AStarMove extends Plan {
     static isApplicableTo(a) { return a === 'go_to'; }
-
+     /**
+     * Executes movement using the A* pathfinding algorithm.
+     * @param {string} _ - Placeholder.
+     * @param {number} x - Target x coordinate.
+     * @param {number} y - Target y coordinate.
+     */
     async execute(_, x, y) {
         const isWall = (xx, yy) => {
             const t = map.xy(xx, yy);
@@ -116,6 +148,12 @@ class AStarMove extends Plan {
         return true;
     }
 }
+
+// ====================== EXPLORATION PLANS ======================
+
+/**
+ * Plan that randomly moves around the map.
+ */
 class RandomMove extends Plan {
     static isApplicableTo(a) { return a === 'random_move'; }
 
@@ -127,19 +165,16 @@ class RandomMove extends Plan {
             if (!t) return true;
             return (t.type === 0);
         };
-
         while (!this.stopped) {
             const dir = dirs[Math.floor(Math.random() * 4)];
             let newX = me.x;
             let newY = me.y;
-
             if (dir === 'up') newY--;
             else if (dir === 'down') newY++;
             else if (dir === 'left') newX--;
             else if (dir === 'right') newX++;
-
             if (isWall(newX, newY)) {
-                await new Promise(r => setTimeout(r, 100)); // Aspetta un po' prima di riprovare
+                await new Promise(r => setTimeout(r, 100)); 
                 continue;
             }
 
@@ -155,7 +190,9 @@ class RandomMove extends Plan {
   }
 
 const visitedTiles = new Map();
-
+/**
+ * Plan to explore all spawn tiles in sequence.
+ */
 class ExploreSpawnTiles extends Plan {
     static isApplicableTo(a) { return a === 'explore'; } 
     constructor(parent) {
@@ -167,6 +204,9 @@ class ExploreSpawnTiles extends Plan {
       this._currentIndex = 0;
     }
 
+    /**
+     * Visits each spawn tile and runs option generation.
+     */
     async execute() {
       if (this._spawnQueue.length === 0) {
         await new Promise(r => setTimeout(r, 500));
@@ -195,9 +235,15 @@ class ExploreSpawnTiles extends Plan {
     }
 }
 
+/**
+ * Smarter exploration strategy that prioritizes under-visited and central tiles.
+ */
 class SmartExplore extends Plan {
     static isApplicableTo(a) { return a === 'explore'; } 
 
+    /**
+     * Explores the map by prioritizing nearby unvisited tiles and updating visit history.
+     */
     async execute() {
 
         function scoreMove(x, y) {
@@ -213,7 +259,6 @@ class SmartExplore extends Plan {
             { x: me.x,     y: me.y - 1 },
         ].filter(n => !isWall(n.x, n.y) && !isTileBlockedByAgent(n.x, n.y));
 
-
         let candidates = neighbors.map(n => ({
             x: n.x,
             y: n.y,
@@ -221,9 +266,7 @@ class SmartExplore extends Plan {
             visits: visitedTiles.get(`${n.x},${n.y}`) || 0,
             score: scoreMove(n.x, n.y)
         }));
-
         candidates = candidates.filter(c => c.visits < 5);
-
         if (candidates.length > 0) {
             candidates.sort((a, b) => a.score - b.score);
             const best = candidates[0];
@@ -235,12 +278,10 @@ class SmartExplore extends Plan {
             optionsGeneration();
             return true;
         }
-
         const allFrontiers = Array.from(map.tiles.values())
             .filter(t => !isWall(t.x, t.y)
                        && !isTileBlockedByAgent(t.x, t.y)
                        && (visitedTiles.get(`${t.x},${t.y}`) || 0) === 0);
-
         if (allFrontiers.length > 0) {
             allFrontiers.sort((a, b) => {
                 const da = distance(me, a);
